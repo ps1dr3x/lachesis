@@ -7,6 +7,7 @@ use std::fs::read_to_string;
 pub struct LacConf {
     pub file_path: String,
     pub debug: bool,
+    pub help: bool,
     pub threads: usize,
     pub max_requests: usize,
     pub print_records: bool
@@ -16,6 +17,7 @@ pub fn get_cli_params() -> Result<LacConf, String> {
     let mut conf = LacConf {
         file_path: "".to_string(),
         debug: false,
+        help: false,
         threads: 250,
         max_requests: 10000,
         print_records: false
@@ -34,6 +36,9 @@ pub fn get_cli_params() -> Result<LacConf, String> {
             },
             "--debug" => {
                 conf.debug = true;
+            },
+            "--help" => {
+                conf.help = true;
             },
             "--threads" => {
                 let arg = args.next();
@@ -66,7 +71,7 @@ pub fn get_cli_params() -> Result<LacConf, String> {
         }
     }
 
-    if conf.file_path.is_empty() && !conf.print_records {
+    if conf.file_path.is_empty() && !conf.help && !conf.print_records {
         return Err("Parameter --file is mandatory".to_string());
     }
 

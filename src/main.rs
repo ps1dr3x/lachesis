@@ -18,6 +18,23 @@ use unindent::unindent;
 use net::LacResponse;
 use utils::LacConf;
 
+fn usage() {
+    println!("{}", unindent("
+
+        Usage:
+
+        lachesis --file dns.json [...optional arguments]
+
+        Optional arguments:
+
+        --threads NUM (default: 250)
+        --max-requests NUM (default: 10000)
+        --debug
+        --print-records
+
+    "));
+}
+
 fn main() {
     println!("{}", unindent("
 
@@ -34,25 +51,18 @@ fn main() {
     let conf = utils::get_cli_params();
     if conf.is_err() {
         println!("{}", conf.err().unwrap());
-        println!("{}", unindent("
-
-            Usage:
-
-            lachesis --file dns.json
-
-            Optional arguments:
-
-            --threads NUM (default: 250)
-            --max-requests NUM (default: 10000)
-            --debug
-            --print-records
-
-        "));
+        usage();
         return;
     }
     let conf: LacConf = conf.unwrap();
 
-    // --print-records is true. Print records and exit
+    // --help option specified. Print usage and exit
+    if conf.help {
+        usage();
+        return;
+    }
+
+    // --print-records option specified. Print records and exit
     if conf.print_records {
         let dbm = db::DbMan::new();
         let vulns = dbm.get_all_vuln().unwrap();
