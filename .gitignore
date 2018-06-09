@@ -1,0 +1,7 @@
+
+/target
+**/*.rs.bk
+logs/*
+!logs/.gitkeep
+db/*
+!db/.gitkeep
