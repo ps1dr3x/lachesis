@@ -1,33 +1,62 @@
-{
-    "wordpress": {
-        "latest_version": "4.9.6",
-        "vulnerable_versions": [
+[
+    {
+        "name": "wordpress",
+        "ports": [80, 443],
+        "service": {
+            "regex": "(?m)<meta name=\"generator\" content=\"WordPress "
+        },
+        "version": {
+            "semver": true,
+            "regex": "(?m)<meta name=\"generator\" content=\"WordPress "
+        },
+        "versions": [
             {
                 "from": "4.3.0",
                 "to": "4.3.6",
-                "exploit": "CVE-2016-10033"
+                "description": "VULNERABLE! [CVE-2016-10033]"
             },
             {
                 "from": "4.4.0",
                 "to": "4.4.5",
-                "exploit": "CVE-2016-10033"
+                "description": "VULNERABLE! [CVE-2016-10033]"
             },
             {
                 "from": "4.5.0",
                 "to": "4.5.4",
-                "exploit": "CVE-2016-10033"
+                "description": "VULNERABLE! [CVE-2016-10033]"
             },
             {
                 "from": "4.6.0",
                 "to": "4.6.1",
-                "exploit": "CVE-2016-10033"
+                "description": "VULNERABLE! [CVE-2016-10033]"
             },
             {
                 "from": "4.7.0",
                 "to": "4.7.0",
-                "exploit": "CVE-2016-10033"
+                "description": "VULNERABLE! [CVE-2016-10033]"
             }
-        ],
-        "plugins": []
+        ]
+    },
+    {
+        "name": "vnc",
+        "ports": [5900],
+        "service": {
+            "regex": "RFB "
+        },
+        "version": {
+            "semver": false
+        },
+        "versions": [
+            {
+                "regex": "RFB 004.001",
+                "version": "004.001",
+                "description": "Version 004.001"
+            },
+            {
+                "regex": "RFB 003.008",
+                "version": "003.008",
+                "description": "Version 003.008"
+            }
+        ]
     }
-}
+]

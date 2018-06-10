@@ -18,6 +18,15 @@ use unindent::unindent;
 use net::LacResponse;
 use utils::LacConf;
 
+struct Stats {
+    requests: usize,
+    requests_errors: usize,
+    requests_https: usize,
+    requests_http: usize,
+    requests_status_not_ok: usize,
+    services_found: usize
+}
+
 fn usage() {
     println!("{}", unindent("
 
@@ -47,7 +56,7 @@ fn main() {
 
     "));
 
-    // Check parameters
+    // Check cli parameters
     let conf = utils::get_cli_params();
     if conf.is_err() {
         println!("{}", conf.err().unwrap());
@@ -65,26 +74,27 @@ fn main() {
     // --print-records option specified. Print records and exit
     if conf.print_records {
         let dbm = db::DbMan::new();
-        let vulns = dbm.get_all_vuln().unwrap();
-        if vulns.is_empty() {
-            println!("Db is empty\n");
+        let records = dbm.get_all_services().unwrap();
+        if records.is_empty() {
+            println!("Db is empty or not created yet\n");
             return;
         }
-        println!("Records:\n");
-        for vuln in vulns {
-            println!("{:?}", vuln);
+        println!("{} records:\n", records.len());
+        for rec in records {
+            println!("{:?}", rec);
         }
         return;
     }
 
-    // Results counters
-    let mut requests: usize = 0;
-    let mut requests_errors: usize = 0;
-    let mut requests_https: usize = 0;
-    let mut requests_http: usize = 0;
-    let mut requests_status_not_ok: usize = 0;
-    let mut wordpress_sites: usize = 0;
-    let mut potentially_vulnerable: usize = 0;
+    // Some stats
+    let mut stats = Stats {
+        requests: 0,
+        requests_errors: 0,
+        requests_https: 0,
+        requests_http: 0,
+        requests_status_not_ok: 0,
+        services_found: 0
+    };
 
     // Open dns records file and instantiate the reader
     let dns_records_file_path: &Path = Path::new(conf.file_path.as_str());
@@ -97,7 +107,7 @@ fn main() {
     let (tx, rx): (mpsc::Sender<LacResponse>, mpsc::Receiver<LacResponse>) = mpsc::channel();
 
     let n_requests = conf.max_requests;
-    while requests < n_requests {
+    while stats.requests < n_requests {
         // Pick a random dns record
         let line_str: String = easy_reader.random_line().unwrap();
         let line_json: serde_json::Value = serde_json::from_str(&line_str).unwrap();
@@ -116,13 +126,10 @@ fn main() {
             if conf.debug { println!("Request in thread {} completed\n", wr.thread_id); }
 
             // Increment results variables
-            if wr.is_request_error { requests_errors += 1; }
-            if wr.is_https { requests_https += 1; }
-            if wr.is_http { requests_http += 1; }
-            if wr.is_status_not_ok { requests_status_not_ok += 1; }
-
-            if wr.is_wordpress { wordpress_sites += 1; }
-            if wr.is_potentially_vulnerable { potentially_vulnerable += 1; }
+            if wr.is_request_error { stats.requests_errors += 1; }
+            if wr.is_https { stats.requests_https += 1; }
+            if wr.is_http { stats.requests_http += 1; }
+            if wr.is_status_not_ok { stats.requests_status_not_ok += 1; }
 
             // And use its thread_id for a new thread
             wr.thread_id
@@ -145,9 +152,9 @@ fn main() {
         }
 
         // Total requests counter (printed every 500 request)
-        requests += 1;
-        if requests % 500 == 0 {
-            println!("Requests: {}\n", requests);
+        stats.requests += 1;
+        if stats.requests % 500 == 0 {
+            println!("Requests: {}\n", stats.requests);
         }
     }
 
@@ -169,18 +176,15 @@ fn main() {
         Https: {}
         Http: {}
 
-        WordPress sites found: {}
-
-        Potentially vulnerable: {}
+        Matching services found: {}
         ===========================
     ",
         n_threads,
-        requests,
-        requests_errors,
-        requests_status_not_ok,
-        requests_https,
-        requests_http,
-        wordpress_sites,
-        potentially_vulnerable).as_str())
+        stats.requests,
+        stats.requests_errors,
+        stats.requests_status_not_ok,
+        stats.requests_https,
+        stats.requests_http,
+        stats.services_found).as_str())
     );
 }

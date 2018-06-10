@@ -13,8 +13,7 @@ pub struct LacResponse {
     pub is_https: bool,
     pub is_http: bool,
     pub is_status_not_ok: bool,
-    pub is_wordpress: bool,
-    pub is_potentially_vulnerable: bool
+    pub matching: u16
 }
 
 pub fn lac_request_thread(debug: bool, thread_tx: mpsc::Sender<LacResponse>, thread_id: u16, target: String) -> thread::JoinHandle<()> {
@@ -26,8 +25,7 @@ pub fn lac_request_thread(debug: bool, thread_tx: mpsc::Sender<LacResponse>, thr
             is_https: false,
             is_http: false,
             is_status_not_ok: false,
-            is_wordpress: false,
-            is_potentially_vulnerable: false
+            matching: 0
         };
 
         let mut url: String = format!("https://{}", target);
@@ -69,31 +67,25 @@ pub fn lac_request_thread(debug: bool, thread_tx: mpsc::Sender<LacResponse>, thr
                 response_text
             );
 
-            if detector.response.wordpress.is_wordpress {
-                wr.is_wordpress = true;
-            }
+            if !detector.response.is_empty() {
+                wr.matching = detector.response.len() as u16;
 
-            if detector.response.potentially_vulnerable {
-                wr.is_potentially_vulnerable = true;
-
-                for vuln in detector.response.vulnerable {
+                for res in detector.response {
                     println!("{}", unindent(format!("
                         ===
-                        Potentially vulnerable service found: {}
+                        Matching service found: {}
                         Service: {}
                         Version: {}
-                        Exploit: {}
                         ===
                     ",
                         target,
-                        vuln.service,
-                        vuln.version,
-                        vuln.exploit).as_str())
+                        res.service,
+                        res.version).as_str())
                     );
 
                     // Save on db
                     let dbm: DbMan = DbMan::new();
-                    dbm.save_vuln(vuln).unwrap();
+                    dbm.save_service(res).unwrap();
                 }
             }
         }
