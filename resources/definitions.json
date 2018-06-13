@@ -1,6 +1,7 @@
 [
     {
         "name": "wordpress",
+        "protocol": "HTTP",
         "ports": [80, 443],
         "service": {
             "regex": "(?m)<meta name=\"generator\" content=\"WordPress "
@@ -39,6 +40,8 @@
     },
     {
         "name": "vnc",
+        "protocol": "TCP",
+        "header": "RFB 003.008\n",
         "ports": [5900],
         "service": {
             "regex": "RFB "

@@ -95,6 +95,31 @@ pub fn lac_request_thread(debug: bool, thread_tx: mpsc::Sender<LacResponse>, thr
     })
 }
 
+pub fn tcp(host: &str, port: u16, header: &str) -> Result<String, String> {
+    use std::net::TcpStream;
+    use std::io::{Error, Read, Write};
+
+    let addr: String = format!("{}:{}", host, port);
+
+    let stream: Result<TcpStream, Error> = TcpStream::connect(&addr);
+    if stream.is_err() {
+        return Err(format!("Stream connect error: \n{}\n", stream.err().unwrap()))
+    }
+    let mut stream: TcpStream = stream.unwrap();
+
+    let stream_write: Result<(), Error> = stream.write_all(header.as_bytes());
+    if stream_write.is_err() {
+        return Err(format!("Stream write error: \n{}\n", stream_write.err().unwrap()))
+    }
+
+    let mut res_string: String = String::new();
+    if stream.read_to_string(&mut res_string).unwrap() == 0 {
+        return Err("Stream read error: \nempty response\n".to_string());
+    }
+
+    Ok(res_string)
+}
+
 #[allow(dead_code)]
 fn ip2hex(ip: &str) -> u32 {
     let parts = ip.split('.').map(|p| p.parse::<u32>().unwrap());
