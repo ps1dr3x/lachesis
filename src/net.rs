@@ -95,26 +95,46 @@ pub fn lac_request_thread(debug: bool, thread_tx: mpsc::Sender<LacResponse>, thr
     })
 }
 
-pub fn tcp(host: &str, port: u16, header: &str) -> Result<String, String> {
+pub fn tcp(host: &str, port: u16, message: &str, timeout: bool) -> Result<String, String> {
     use std::net::TcpStream;
     use std::io::{Error, Read, Write};
+    use std::time::Duration;
 
     let addr: String = format!("{}:{}", host, port);
 
     let stream: Result<TcpStream, Error> = TcpStream::connect(&addr);
     if stream.is_err() {
-        return Err(format!("Stream connect error: \n{}\n", stream.err().unwrap()))
+        return Err(format!("Stream connection error: \n{}\n", stream.err().unwrap()))
     }
     let mut stream: TcpStream = stream.unwrap();
 
-    let stream_write: Result<(), Error> = stream.write_all(header.as_bytes());
+    let stream_write: Result<(), Error> = stream.write_all(message.as_bytes());
     if stream_write.is_err() {
         return Err(format!("Stream write error: \n{}\n", stream_write.err().unwrap()))
     }
 
     let mut res_string: String = String::new();
-    if stream.read_to_string(&mut res_string).unwrap() == 0 {
-        return Err("Stream read error: \nempty response\n".to_string());
+    if timeout {
+        stream.set_read_timeout(Some(Duration::from_millis(200))).unwrap();
+        loop {
+            let mut buf = [0];
+            match stream.read(&mut buf) {
+                Err(e) => {
+                    if res_string.len() > 0 { break; }
+                    return Err(format!("TCP stream read error: {}\n", e));
+                },
+                Ok(m) => {
+                    if m == 0 {
+                        return Err("TCP stream read error: \nempty response\n".to_string());
+                    }
+                    res_string += String::from_utf8(buf.to_vec()).unwrap().as_str();
+                },
+            };
+        }
+    } else {
+        if stream.read_to_string(&mut res_string).unwrap() == 0 {
+            return Err("TCP stream read error: \nempty response\n".to_string());
+        }
     }
 
     Ok(res_string)
