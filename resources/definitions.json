@@ -41,7 +41,10 @@
     {
         "name": "vnc",
         "protocol": "TCP",
-        "header": "RFB 003.008\n",
+        "options": {
+            "timeout": false
+        },
+        "message": "RFB 003.008\n",
         "ports": [5900],
         "service": {
             "regex": "RFB "
@@ -61,5 +64,39 @@
                 "description": "Version 003.008"
             }
         ]
+    },
+    {
+        "name": "sshd",
+        "protocol": "TCP",
+        "options": {
+            "timeout": false
+        },
+        "message": "Hey SSH\r\n",
+        "ports": [22],
+        "service": {
+            "regex": "SSH-"
+        },
+        "version": {
+            "semver": false
+        },
+        "versions": [
+            {
+                "regex": "SSH-2.0-OpenSSH_7.7",
+                "version": "SSH-2.0-OpenSSH_7.7",
+                "description": "Version SSH-2.0-OpenSSH_7.7"
+            }
+        ]
+    },
+    {
+        "name": "redis",
+        "protocol": "TCP",
+        "options": {
+            "timeout": true
+        },
+        "message": "PING\r\n",
+        "ports": [6379],
+        "service": {
+            "regex": "PONG"
+        }
     }
 ]
