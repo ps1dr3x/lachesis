@@ -23,7 +23,7 @@ struct Stats {
     requests_errors: usize,
     requests_https: usize,
     requests_http: usize,
-    requests_status_not_ok: usize,
+    requests_tcp_custom: usize,
     services_found: usize
 }
 
@@ -92,7 +92,7 @@ fn main() {
         requests_errors: 0,
         requests_https: 0,
         requests_http: 0,
-        requests_status_not_ok: 0,
+        requests_tcp_custom: 0,
         services_found: 0
     };
 
@@ -129,7 +129,7 @@ fn main() {
             if wr.is_request_error { stats.requests_errors += 1; }
             if wr.is_https { stats.requests_https += 1; }
             if wr.is_http { stats.requests_http += 1; }
-            if wr.is_status_not_ok { stats.requests_status_not_ok += 1; }
+            if wr.is_tcp_custom { stats.requests_tcp_custom += 1; }
 
             // And use its thread_id for a new thread
             wr.thread_id
@@ -138,10 +138,10 @@ fn main() {
         // Spawn a new thread
         let thread_tx: mpsc::Sender<LacResponse> = tx.clone();
         let thread: thread::JoinHandle<()> = net::lac_request_thread(
-            conf.debug,
             thread_tx,
             thread_id,
-            line_json["name"].as_str().unwrap().to_string()
+            line_json["name"].as_str().unwrap().to_string(),
+            conf.debug
         );
 
         // Push the new thread into the threads vector
@@ -172,9 +172,9 @@ fn main() {
         Threads: {}
         Requests: {}
         Connection errors: {}
-        Status != 200 OK: {}
         Https: {}
         Http: {}
+        Tcp/custom: {}
 
         Matching services found: {}
         ===========================
@@ -182,9 +182,9 @@ fn main() {
         n_threads,
         stats.requests,
         stats.requests_errors,
-        stats.requests_status_not_ok,
         stats.requests_https,
         stats.requests_http,
+        stats.requests_tcp_custom,
         stats.services_found).as_str())
     );
 }

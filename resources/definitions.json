@@ -1,10 +1,10 @@
 [
     {
         "name": "wordpress",
-        "protocol": "HTTP",
-        "ports": [80, 443],
+        "protocol": "http/s",
         "service": {
-            "regex": "(?m)<meta name=\"generator\" content=\"WordPress "
+            "regex": "(?m)<meta name=\"generator\" content=\"WordPress ",
+            "log": false
         },
         "version": {
             "semver": true,
@@ -40,14 +40,15 @@
     },
     {
         "name": "vnc",
-        "protocol": "TCP",
+        "protocol": "tcp/custom",
         "options": {
             "timeout": false
         },
-        "message": "RFB 003.008\n",
         "ports": [5900],
+        "message": "RFB 003.008\n",
         "service": {
-            "regex": "RFB "
+            "regex": "RFB ",
+            "log": true
         },
         "version": {
             "semver": false
@@ -67,14 +68,15 @@
     },
     {
         "name": "sshd",
-        "protocol": "TCP",
+        "protocol": "tcp/custom",
         "options": {
             "timeout": false
         },
-        "message": "Hey SSH\r\n",
         "ports": [22],
+        "message": "Hey SSH\r\n",
         "service": {
-            "regex": "SSH-"
+            "regex": "SSH-",
+            "log": true
         },
         "version": {
             "semver": false
@@ -89,14 +91,15 @@
     },
     {
         "name": "redis",
-        "protocol": "TCP",
+        "protocol": "tcp/custom",
         "options": {
             "timeout": true
         },
-        "message": "PING\r\n",
         "ports": [6379],
+        "message": "PING\r\n",
         "service": {
-            "regex": "PONG"
+            "regex": "PONG",
+            "log": true
         }
     }
 ]

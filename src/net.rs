@@ -1,8 +1,11 @@
 extern crate reqwest;
 extern crate unindent;
 
-use std::thread;
-use std::sync::mpsc;
+use std::{
+    thread,
+    sync::mpsc,
+    path::Path
+};
 use detector::Detector;
 use db::DbMan;
 use unindent::unindent;
@@ -12,59 +15,85 @@ pub struct LacResponse {
     pub is_request_error: bool,
     pub is_https: bool,
     pub is_http: bool,
-    pub is_status_not_ok: bool,
+    pub is_tcp_custom: bool,
     pub matching: u16
 }
 
-pub fn lac_request_thread(debug: bool, thread_tx: mpsc::Sender<LacResponse>, thread_id: u16, target: String) -> thread::JoinHandle<()> {
-    if debug { println!("Spawning new thread. ID: {}\nTarget: {}\n", thread_id, target); }
+pub fn lac_request_thread(thread_tx: mpsc::Sender<LacResponse>, thread_id: u16, target: String, debug: bool) -> thread::JoinHandle<()> {
+    if debug { println!("[{}] - Spawning new thread. ID: {}\n", target, thread_id); }
+
     thread::spawn(move || {
         let mut wr: LacResponse = LacResponse {
             thread_id: thread_id,
             is_request_error: false,
             is_https: false,
             is_http: false,
-            is_status_not_ok: false,
+            is_tcp_custom: false,
             matching: 0
         };
+        let mut responses: Vec<(u16, String)> = Vec::new();
 
+        // Http/s
         let mut url: String = format!("https://{}", target);
-        let mut response: reqwest::Response;
-        match reqwest::get(url.as_str()) {
-            Ok(r) => response = r,
-            Err(e) => {
-                if debug { println!("HTTPS not available on target: {}\n Request error: {}\n Trying plain http...\n", target, e); }
-                wr.is_https = true;
+        let mut response = reqwest::get(url.as_str());
+        if response.is_ok() { wr.is_https = true; }
+        if response.is_err() {
+            if debug { 
+                println!("[{}] - HTTPS not available\nRequest error: {}\n", target, response.unwrap_err()); 
+                println!("[{}] - Trying plain HTTP...\n", target)
+            }
+            url = format!("http://{}", target);
+            response = reqwest::get(url.as_str());
+            if response.is_ok() { wr.is_http = true; }
+        }
+        if response.is_ok() {
+            responses.push((
+                if wr.is_https { 443 } else { 80 },
+                response.unwrap().text().unwrap()
+            ));
+        } else if debug { println!("[{}] - HTTP request error: {}\n", target, response.unwrap_err()); }
 
-                url = format!("http://{}", target);
-                match reqwest::get(url.as_str()) {
-                    Ok(r) => {
-                        response = r;
-                        wr.is_http = true;
-                    },
-                    Err(_e) => {
-                        if debug { println!("HTTP request error: {}\n", e); }
-                        wr.is_request_error = true;
-                        thread_tx.send(wr).unwrap();
-                        return;
-                    }
-                }
+        // Tcp/custom
+        let definitions = super::utils::read_json_file(Path::new("resources/definitions.json"));
+        for def in definitions.as_array().unwrap() {
+            if def["protocol"].as_str().unwrap() != "tcp/custom" {
+                continue;
+            }
+
+            for port in def["ports"].as_array().unwrap() {
+                let response = tcp_custom(
+                    target.as_str(),
+                    port.as_u64().unwrap() as u16,
+                    def["message"].as_str().unwrap(),
+                    def["options"]["timeout"].as_bool().unwrap_or(false)
+                );
+                
+                if response.is_ok() {
+                    wr.is_tcp_custom == true;
+                    responses.push((
+                        port.as_u64().unwrap() as u16,
+                        response.unwrap()
+                    ));
+                } else if debug { println!("{}", response.unwrap_err()); }
             }
         }
 
-        if response.status() != reqwest::StatusCode::Ok {
-            if debug { println!("Request status not OK: {}\n", response.status()); }
-            wr.is_status_not_ok = true;
+        // Check if there has been at least one successful connection
+        if !wr.is_https && !wr.is_http && !wr.is_tcp_custom {
+            wr.is_request_error = true;
+            return thread_tx.send(wr).unwrap();
         }
 
-        let response_text: String = response.text().unwrap_or("Error".to_string());
-        if !response_text.eq("Error") {
-            // Valid response body. Run the detector
+        // Detection
+        for res in responses {
+
+            //println!("{}", res.1);
+
             let mut detector: Detector = Detector::new();
             detector.run(
                 target.to_string(),
-                if wr.is_http { 80 } else { 443 },
-                response_text
+                res.0,
+                res.1
             );
 
             if !detector.response.is_empty() {
@@ -83,7 +112,6 @@ pub fn lac_request_thread(debug: bool, thread_tx: mpsc::Sender<LacResponse>, thr
                         res.version).as_str())
                     );
 
-                    // Save on db
                     let dbm: DbMan = DbMan::new();
                     dbm.save_service(res).unwrap();
                 }
@@ -95,7 +123,7 @@ pub fn lac_request_thread(debug: bool, thread_tx: mpsc::Sender<LacResponse>, thr
     })
 }
 
-pub fn tcp(host: &str, port: u16, message: &str, timeout: bool) -> Result<String, String> {
+fn tcp_custom(host: &str, port: u16, message: &str, timeout: bool) -> Result<String, String> {
     use std::net::TcpStream;
     use std::io::{Error, Read, Write};
     use std::time::Duration;
@@ -104,36 +132,37 @@ pub fn tcp(host: &str, port: u16, message: &str, timeout: bool) -> Result<String
 
     let stream: Result<TcpStream, Error> = TcpStream::connect(&addr);
     if stream.is_err() {
-        return Err(format!("Stream connection error: \n{}\n", stream.err().unwrap()))
+        return Err(format!("[{}:{}] - TCP stream connection error: \n{}\n", host, port, stream.err().unwrap()))
     }
     let mut stream: TcpStream = stream.unwrap();
 
     let stream_write: Result<(), Error> = stream.write_all(message.as_bytes());
     if stream_write.is_err() {
-        return Err(format!("Stream write error: \n{}\n", stream_write.err().unwrap()))
+        return Err(format!("[{}:{}] - TCP stream write error: \n{}\n", host, port, stream_write.err().unwrap()))
     }
 
+    let start = super::time::now();
     let mut res_string: String = String::new();
     if timeout {
         stream.set_read_timeout(Some(Duration::from_millis(200))).unwrap();
-        loop {
+        while (super::time::now() - start) > super::time::Duration::seconds(5) {
             let mut buf = [0];
             match stream.read(&mut buf) {
                 Err(e) => {
                     if res_string.len() > 0 { break; }
-                    return Err(format!("TCP stream read error: {}\n", e));
+                    return Err(format!("[{}:{}] - TCP stream read error: {}\n", host, port, e));
                 },
                 Ok(m) => {
                     if m == 0 {
-                        return Err("TCP stream read error: \nempty response\n".to_string());
+                        return Err(format!("[{}:{}] - TCP stream read error: \nempty response\n", host, port));
                     }
                     res_string += String::from_utf8(buf.to_vec()).unwrap().as_str();
                 },
             };
         }
     } else {
-        if stream.read_to_string(&mut res_string).unwrap() == 0 {
-            return Err("TCP stream read error: \nempty response\n".to_string());
+        if stream.read_to_string(&mut res_string).unwrap_or(0) == 0 {
+            return Err(format!("[{}:{}] - TCP stream read error: \nempty response\n", host, port));
         }
     }
 

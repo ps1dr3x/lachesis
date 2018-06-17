@@ -64,10 +64,12 @@ impl Detector {
             let mat = re.find(self.res_body.as_str());
 
             if mat.is_none() { continue; }
-
             let mat = mat.unwrap();
 
             response.service = def["name"].as_str().unwrap().to_string();
+            if def["service"]["log"].as_bool().unwrap() {
+                self.response.push(response.clone());
+            }
 
             let versions = def["versions"].as_array().unwrap();
             if def["version"]["semver"].as_bool().unwrap() {
@@ -85,7 +87,7 @@ impl Detector {
 
                 let parsed_ver = Version::parse(response.version.as_str());
                 if parsed_ver.is_err() {
-                    println!("Unknown or invalid semver: {}\nHost: {} Port: {}\n", response.version, self.host, self.port);
+                    println!("[{}:{}] - Unknown or invalid semver: {}", self.host, self.port, response.version);
                     continue;
                 }
 
