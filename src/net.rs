@@ -1,8 +1,11 @@
 extern crate reqwest;
 extern crate unindent;
-extern crate time;
 
-use std::{ thread, sync::mpsc };
+use std::{
+    thread,
+    sync::mpsc,
+    time::Instant
+};
 use detector::Detector;
 use db::DbMan;
 use unindent::unindent;
@@ -118,7 +121,7 @@ pub fn lac_request_thread(thread_tx: mpsc::Sender<LacResponse>, thread_id: u16, 
     })
 }
 
-fn tcp_custom(host: &str, port: u16, message: &str, timeout: bool) -> Result<String, String> {
+pub fn tcp_custom(host: &str, port: u16, message: &str, timeout: bool) -> Result<String, String> {
     use std::net::TcpStream;
     use std::io::{Error, Read, Write};
     use std::time::Duration;
@@ -136,11 +139,12 @@ fn tcp_custom(host: &str, port: u16, message: &str, timeout: bool) -> Result<Str
         return Err(format!("[{}:{}] - TCP stream write error: \n{}\n", host, port, stream_write.err().unwrap()))
     }
 
-    let start = time::now();
+    let start = Instant::now();
     let mut res_string: String = String::new();
     if timeout {
         stream.set_read_timeout(Some(Duration::from_millis(200))).unwrap();
-        while (time::now() - start) > time::Duration::seconds(5) {
+
+        while start.elapsed().as_secs() < 5 {
             let mut buf = [0];
             match stream.read(&mut buf) {
                 Err(e) => {

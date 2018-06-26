@@ -43,7 +43,7 @@
         "name": "vnc",
         "protocol": "tcp/custom",
         "options": {
-            "timeout": false,
+            "timeout": true,
             "ports": [5900],
             "message": "RFB 003.008\n"
         },
