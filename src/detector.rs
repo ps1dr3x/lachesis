@@ -90,7 +90,7 @@ impl Detector {
 
                 let parsed_ver = Version::parse(response.version.as_str());
                 if parsed_ver.is_err() {
-                    println!("[{}:{}] - Unknown or invalid semver: {}", self.host, self.port, response.version);
+                    println!("[{}:{}] - Unknown or invalid semver: {}\n", self.host, self.port, response.version);
                     continue;
                 }
 
