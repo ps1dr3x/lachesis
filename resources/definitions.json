@@ -6,97 +6,96 @@
             "regex": "(?m)<meta name=\"generator\" content=\"WordPress ",
             "log": false
         },
-        "version": {
-            "semver": true,
-            "regex": "(?m)<meta name=\"generator\" content=\"WordPress "
-        },
-        "versions": [
-            {
-                "from": "4.3.0",
-                "to": "4.3.6",
-                "description": "VULNERABLE! [CVE-2016-10033]"
-            },
-            {
-                "from": "4.4.0",
-                "to": "4.4.5",
-                "description": "VULNERABLE! [CVE-2016-10033]"
-            },
-            {
-                "from": "4.5.0",
-                "to": "4.5.4",
-                "description": "VULNERABLE! [CVE-2016-10033]"
-            },
-            {
-                "from": "4.6.0",
-                "to": "4.6.1",
-                "description": "VULNERABLE! [CVE-2016-10033]"
-            },
-            {
-                "from": "4.7.0",
-                "to": "4.7.0",
-                "description": "VULNERABLE! [CVE-2016-10033]"
+        "versions": {
+            "semver": {
+                "regex": "(?m)<meta name=\"generator\" content=\"WordPress ",
+                "ranges": [
+                    {
+                        "from": "4.3.0",
+                        "to": "4.3.6",
+                        "description": "VULNERABLE! [CVE-2016-10033]"
+                    },
+                    {
+                        "from": "4.4.0",
+                        "to": "4.4.5",
+                        "description": "VULNERABLE! [CVE-2016-10033]"
+                    },
+                    {
+                        "from": "4.5.0",
+                        "to": "4.5.4",
+                        "description": "VULNERABLE! [CVE-2016-10033]"
+                    },
+                    {
+                        "from": "4.6.0",
+                        "to": "4.6.1",
+                        "description": "VULNERABLE! [CVE-2016-10033]"
+                    },
+                    {
+                        "from": "4.7.0",
+                        "to": "4.7.0",
+                        "description": "VULNERABLE! [CVE-2016-10033]"
+                    }
+                ]
             }
-        ]
+        }
     },
     {
         "name": "vnc",
         "protocol": "tcp/custom",
         "options": {
-            "timeout": false
+            "timeout": false,
+            "ports": [5900],
+            "message": "RFB 003.008\n"
         },
-        "ports": [5900],
-        "message": "RFB 003.008\n",
         "service": {
             "regex": "RFB ",
             "log": true
         },
-        "version": {
-            "semver": false
-        },
-        "versions": [
-            {
-                "regex": "RFB 004.001",
-                "version": "004.001",
-                "description": "Version 004.001"
-            },
-            {
-                "regex": "RFB 003.008",
-                "version": "003.008",
-                "description": "Version 003.008"
-            }
-        ]
+        "versions": {
+            "regex": [
+                {
+                    "regex": "RFB 004.001",
+                    "version": "004.001",
+                    "description": "Version 004.001"
+                },
+                {
+                    "regex": "RFB 003.008",
+                    "version": "003.008",
+                    "description": "Version 003.008"
+                }
+            ]
+        }
     },
     {
         "name": "sshd",
         "protocol": "tcp/custom",
         "options": {
-            "timeout": false
+            "timeout": false,
+            "ports": [22],
+            "message": "Hey SSH\r\n"
         },
-        "ports": [22],
-        "message": "Hey SSH\r\n",
         "service": {
             "regex": "SSH-",
-            "log": true
+            "log": false
         },
-        "version": {
-            "semver": false
-        },
-        "versions": [
-            {
-                "regex": "SSH-2.0-OpenSSH_7.7",
-                "version": "SSH-2.0-OpenSSH_7.7",
-                "description": "Version SSH-2.0-OpenSSH_7.7"
-            }
-        ]
+        "versions": {
+            "regex": [
+                {
+                    "regex": "SSH-2.0-OpenSSH_7.7",
+                    "version": "SSH-2.0-OpenSSH_7.7",
+                    "description": "Version SSH-2.0-OpenSSH_7.7"
+                }
+            ]
+        }
     },
     {
         "name": "redis",
         "protocol": "tcp/custom",
         "options": {
-            "timeout": true
+            "timeout": true,
+            "ports": [6379],
+            "message": "PING\r\n"
         },
-        "ports": [6379],
-        "message": "PING\r\n",
         "service": {
             "regex": "PONG",
             "log": true

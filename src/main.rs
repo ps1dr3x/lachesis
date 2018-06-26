@@ -1,8 +1,8 @@
 extern crate easy_reader;
 extern crate serde_json;
-extern crate reqwest;
+#[macro_use]
+extern crate serde_derive;
 extern crate unindent;
-extern crate time;
 
 mod utils;
 mod detector;
@@ -61,14 +61,14 @@ fn main() {
     if conf.is_err() {
         println!("{}", conf.err().unwrap());
         usage();
-        return;
+        ::std::process::exit(1);
     }
     let conf: LacConf = conf.unwrap();
 
     // --help option specified. Print usage and exit
     if conf.help {
         usage();
-        return;
+        ::std::process::exit(0);
     }
 
     // --print-records option specified. Print records and exit
@@ -83,7 +83,14 @@ fn main() {
         for rec in records {
             println!("{:?}", rec);
         }
-        return;
+        ::std::process::exit(0);
+    }
+
+    // Check if definitions are valid
+    let definitions = utils::read_definitions();
+    if definitions.is_err() {
+        println!("Definitions validation failed. Error:\n{}", definitions.unwrap_err());
+        ::std::process::exit(1);
     }
 
     // Some stats

@@ -1,11 +1,8 @@
 extern crate reqwest;
 extern crate unindent;
+extern crate time;
 
-use std::{
-    thread,
-    sync::mpsc,
-    path::Path
-};
+use std::{ thread, sync::mpsc };
 use detector::Detector;
 use db::DbMan;
 use unindent::unindent;
@@ -54,24 +51,25 @@ pub fn lac_request_thread(thread_tx: mpsc::Sender<LacResponse>, thread_id: u16, 
         } else if debug { println!("[{}] - HTTP request error: {}\n", target, response.unwrap_err()); }
 
         // Tcp/custom
-        let definitions = super::utils::read_json_file(Path::new("resources/definitions.json"));
-        for def in definitions.as_array().unwrap() {
-            if def["protocol"].as_str().unwrap() != "tcp/custom" {
+        let definitions = super::utils::read_definitions().unwrap();
+        for def in definitions {
+            if def.protocol.as_str() != "tcp/custom" {
                 continue;
             }
 
-            for port in def["ports"].as_array().unwrap() {
+            let options = def.options.unwrap();
+            for port in options.ports {
                 let response = tcp_custom(
                     target.as_str(),
-                    port.as_u64().unwrap() as u16,
-                    def["message"].as_str().unwrap(),
-                    def["options"]["timeout"].as_bool().unwrap_or(false)
+                    port,
+                    options.message.as_str(),
+                    options.timeout
                 );
                 
                 if response.is_ok() {
                     wr.is_tcp_custom == true;
                     responses.push((
-                        port.as_u64().unwrap() as u16,
+                        port,
                         response.unwrap()
                     ));
                 } else if debug { println!("{}", response.unwrap_err()); }
@@ -86,9 +84,6 @@ pub fn lac_request_thread(thread_tx: mpsc::Sender<LacResponse>, thread_id: u16, 
 
         // Detection
         for res in responses {
-
-            //println!("{}", res.1);
-
             let mut detector: Detector = Detector::new();
             detector.run(
                 target.to_string(),
@@ -141,11 +136,11 @@ fn tcp_custom(host: &str, port: u16, message: &str, timeout: bool) -> Result<Str
         return Err(format!("[{}:{}] - TCP stream write error: \n{}\n", host, port, stream_write.err().unwrap()))
     }
 
-    let start = super::time::now();
+    let start = time::now();
     let mut res_string: String = String::new();
     if timeout {
         stream.set_read_timeout(Some(Duration::from_millis(200))).unwrap();
-        while (super::time::now() - start) > super::time::Duration::seconds(5) {
+        while (time::now() - start) > time::Duration::seconds(5) {
             let mut buf = [0];
             match stream.read(&mut buf) {
                 Err(e) => {

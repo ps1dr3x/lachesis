@@ -1,8 +1,4 @@
-extern crate serde_json;
-
-use std::env;
-use std::path::Path;
-use std::fs::read_to_string;
+use std::fs::File;
 
 pub struct LacConf {
     pub file_path: String,
@@ -14,6 +10,8 @@ pub struct LacConf {
 }
 
 pub fn get_cli_params() -> Result<LacConf, String> {
+    use std::env;
+
     let mut conf = LacConf {
         file_path: "".to_string(),
         debug: false,
@@ -78,7 +76,66 @@ pub fn get_cli_params() -> Result<LacConf, String> {
     Ok(conf)
 }
 
-pub fn read_json_file<P: AsRef<Path>>(path: P) -> serde_json::Value {
-    let content = read_to_string(path).unwrap();
-    serde_json::from_str(&content).unwrap()
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Definition {
+    pub name: String,
+    pub protocol: String,
+    pub options: Option<Options>,
+    pub service: Service,
+    pub versions: Option<Versions>
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Options {
+    pub timeout: bool,
+    pub ports: Vec<u16>,
+    pub message: String
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Service {
+    pub regex: String,
+    pub log: bool
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Versions {
+    pub semver: Option<SemverVersions>,
+    pub regex: Option<Vec<RegexVersion>>
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SemverVersions {
+    pub regex: String,
+    pub ranges: Vec<RangeVersion>
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RangeVersion {
+    pub from: String,
+    pub to: String,
+    pub description: String
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RegexVersion {
+    pub regex: String,
+    pub version: String,
+    pub description: String
+}
+
+pub fn read_definitions() -> Result<Vec<Definition>, String> {
+    use serde_json::{ from_reader, Error };
+
+    let def_file = File::open("resources/definitions.json");
+    if def_file.is_err() {
+        return Err("Where is resources/definitions.json? :(".to_string());
+    }
+    let def_file = def_file.unwrap();
+
+    let definitions: Result<Vec<Definition>, Error> = from_reader(def_file);
+    match definitions {
+        Ok(definitions) => Ok(definitions),
+        Err(err) => Err(format!("JSON parser error: {}", err))
+    }
 }

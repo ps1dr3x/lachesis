@@ -1,8 +1,7 @@
-extern crate serde_json;
 extern crate regex;
 extern crate semver;
 
-use std::path::Path;
+use super::{ utils, utils::Definition };
 use self::regex::Regex;
 use self::semver::Version;
 
@@ -16,7 +15,7 @@ pub struct DetectorResponse {
 }
 
 pub struct Detector {
-    definitions: serde_json::Value,
+    definitions: Vec<Definition>,
     host: String,
     port: u16,
     res_body: String,
@@ -26,7 +25,7 @@ pub struct Detector {
 impl Default for Detector {
     fn default() -> Detector {
         Detector {
-            definitions: super::utils::read_json_file(Path::new("resources/definitions.json")),
+            definitions: utils::read_definitions().unwrap(),
             host: "".to_string(),
             port: 0,
             res_body: "".to_string(),
@@ -51,7 +50,7 @@ impl Detector {
     }
 
     fn detect(&mut self) {
-        for def in self.definitions.as_array().unwrap() {
+        for def in &self.definitions {
             let mut response =  DetectorResponse {
                 service: "".to_string(),
                 version: "".to_string(),
@@ -60,19 +59,23 @@ impl Detector {
                 port: 0
             };
 
-            let re = Regex::new(def["service"]["regex"].as_str().unwrap()).unwrap();
+            let re = Regex::new(def.service.regex.as_str()).unwrap();
             let mat = re.find(self.res_body.as_str());
 
             if mat.is_none() { continue; }
             let mat = mat.unwrap();
 
-            response.service = def["name"].as_str().unwrap().to_string();
-            if def["service"]["log"].as_bool().unwrap() {
+            response.service = def.name.clone();
+            if def.service.log {
                 self.response.push(response.clone());
             }
 
-            let versions = def["versions"].as_array().unwrap();
-            if def["version"]["semver"].as_bool().unwrap() {
+            if def.versions.is_none() {
+                return;
+            }
+            let versions = def.versions.clone().unwrap();
+
+            if let Some(semver) = versions.semver {
                 let mut dots = 0;
                 let tmp_substring = self.res_body.bytes().skip(mat.end());
                 for (_i, c) in tmp_substring.enumerate() {
@@ -92,22 +95,24 @@ impl Detector {
                 }
 
                 let version = parsed_ver.unwrap();
-                for ver in versions {
-                    if version >= Version::parse(ver["from"].as_str().unwrap()).unwrap() &&
-                        version <= Version::parse(ver["to"].as_str().unwrap()).unwrap() {
-                        response.description = ver["description"].as_str().unwrap().to_string();
+                for ver in semver.ranges {
+                    if version >= Version::parse(ver.from.as_str()).unwrap() &&
+                        version <= Version::parse(ver.to.as_str()).unwrap() {
+                        response.description = ver.description;
                         self.response.push(response.clone());
                     }
                 }
-            } else {
-                for ver in versions {
-                    let re = Regex::new(ver["regex"].as_str().unwrap()).unwrap();
+            }
+            
+            if let Some(regex) = versions.regex {
+                for ver in regex {
+                    let re = Regex::new(ver.regex.as_str()).unwrap();
                     let mat = re.find(self.res_body.as_str());
 
                     if mat.is_none() { continue; }
 
-                    response.version = ver["version"].as_str().unwrap().to_string();
-                    response.description = ver["description"].as_str().unwrap().to_string();
+                    response.version = ver.version;
+                    response.description = ver.description;
                     self.response.push(response.clone());
                 }
             }
