@@ -97,8 +97,17 @@
             "message": "PING\r\n"
         },
         "service": {
-            "regex": "PONG",
+            "regex": "\\+PONG|\\-NOAUTH",
             "log": true
+        },
+        "versions": {
+            "regex": [
+                {
+                    "regex": "PONG",
+                    "version": "Unprotected instance (no password)",
+                    "description": "Unprotected instance (no password)"
+                }
+            ]
         }
     }
 ]

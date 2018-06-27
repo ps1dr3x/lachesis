@@ -5,7 +5,7 @@ use super::{ utils, utils::Definition };
 use self::regex::Regex;
 use self::semver::Version;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DetectorResponse {
     pub service: String,
     pub version: String,
