@@ -1,8 +1,8 @@
 extern crate rusqlite;
 
-use std::path::Path;
 use self::rusqlite::{ Connection, Error };
-use super::detector::DetectorResponse;
+use std::path::Path;
+use detector::DetectorResponse;
 
 #[derive(Debug)]
 pub struct ServicesResult {

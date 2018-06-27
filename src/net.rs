@@ -6,6 +6,7 @@ use std::{
     sync::mpsc,
     time::Instant
 };
+use utils::Definition;
 use detector::Detector;
 use db::DbMan;
 use unindent::unindent;
@@ -19,7 +20,13 @@ pub struct LacResponse {
     pub matching: u16
 }
 
-pub fn lac_request_thread(thread_tx: mpsc::Sender<LacResponse>, thread_id: u16, target: String, debug: bool) -> thread::JoinHandle<()> {
+pub fn lac_request_thread(
+        thread_tx: mpsc::Sender<LacResponse>,
+        thread_id: u16,
+        definitions: Vec<Definition>,
+        target: String,
+        debug: bool
+    ) -> thread::JoinHandle<()> {
     if debug { println!("[{}] - Spawning new thread. ID: {}\n", target, thread_id); }
 
     thread::spawn(move || {
@@ -54,8 +61,7 @@ pub fn lac_request_thread(thread_tx: mpsc::Sender<LacResponse>, thread_id: u16, 
         } else if debug { println!("[{}] - HTTP request error: {}\n", target, response.unwrap_err()); }
 
         // Tcp/custom
-        let definitions = super::utils::read_definitions().unwrap();
-        for def in definitions {
+        for def in definitions.clone() {
             if def.protocol.as_str() != "tcp/custom" {
                 continue;
             }
@@ -87,7 +93,7 @@ pub fn lac_request_thread(thread_tx: mpsc::Sender<LacResponse>, thread_id: u16, 
 
         // Detection
         for res in responses {
-            let mut detector: Detector = Detector::new();
+            let mut detector: Detector = Detector::new(definitions.clone());
             detector.run(
                 target.to_string(),
                 res.0,

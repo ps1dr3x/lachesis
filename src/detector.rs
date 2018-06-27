@@ -1,9 +1,9 @@
 extern crate regex;
 extern crate semver;
 
-use super::{ utils, utils::Definition };
 use self::regex::Regex;
 use self::semver::Version;
+use utils::Definition;
 
 #[derive(Clone, Debug)]
 pub struct DetectorResponse {
@@ -25,7 +25,7 @@ pub struct Detector {
 impl Default for Detector {
     fn default() -> Detector {
         Detector {
-            definitions: utils::read_definitions().unwrap(),
+            definitions: Vec::new(),
             host: "".to_string(),
             port: 0,
             res_body: "".to_string(),
@@ -35,8 +35,9 @@ impl Default for Detector {
 }
 
 impl Detector {
-    pub fn new() -> Detector {
+    pub fn new(definitions: Vec<Definition>) -> Detector {
         Detector {
+            definitions: definitions,
             ..Detector::default()
         }
     }

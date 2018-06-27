@@ -9,11 +9,13 @@ mod detector;
 mod db;
 mod net;
 
-use std::path::Path;
-use std::fs::File;
+use std::{
+    path::Path,
+    fs::File,
+    thread,
+    sync::mpsc
+};
 use easy_reader::EasyReader;
-use std::thread;
-use std::sync::mpsc;
 use unindent::unindent;
 use net::LacResponse;
 use utils::LacConf;
@@ -86,12 +88,13 @@ fn main() {
         ::std::process::exit(0);
     }
 
-    // Check if definitions are valid
+    // Read/validate definitions
     let definitions = utils::read_definitions();
     if definitions.is_err() {
         println!("Definitions validation failed. Error:\n{}", definitions.unwrap_err());
         ::std::process::exit(1);
     }
+    let definitions = definitions.unwrap();
 
     // Some stats
     let mut stats = Stats {
@@ -147,6 +150,7 @@ fn main() {
         let thread: thread::JoinHandle<()> = net::lac_request_thread(
             thread_tx,
             thread_id,
+            definitions.clone(),
             line_json["name"].as_str().unwrap().to_string(),
             conf.debug
         );
