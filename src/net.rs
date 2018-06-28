@@ -4,7 +4,10 @@ extern crate unindent;
 use std::{
     thread,
     sync::mpsc,
-    time::Instant
+    time::{
+        Instant,
+        Duration
+    }
 };
 use utils::Definition;
 use detector::Detector;
@@ -13,10 +16,10 @@ use unindent::unindent;
 
 pub struct LacResponse {
     pub thread_id: u16,
-    pub is_request_error: bool,
-    pub is_https: bool,
-    pub is_http: bool,
-    pub is_tcp_custom: bool,
+    pub unreachable: bool,
+    pub https: Vec<u16>,
+    pub http: Vec<u16>,
+    pub tcp_custom: Vec<u16>,
     pub matching: u16
 }
 
@@ -32,51 +35,84 @@ pub fn lac_request_thread(
     thread::spawn(move || {
         let mut wr: LacResponse = LacResponse {
             thread_id: thread_id,
-            is_request_error: false,
-            is_https: false,
-            is_http: false,
-            is_tcp_custom: false,
+            unreachable: false,
+            https: Vec::new(),
+            http: Vec::new(),
+            tcp_custom: Vec::new(),
             matching: 0
         };
         let mut responses: Vec<(u16, String)> = Vec::new();
 
         // Http/s
-        let mut url: String = format!("https://{}", target);
-        let mut response = reqwest::get(url.as_str());
-        if response.is_ok() { wr.is_https = true; }
-        if response.is_err() {
-            if debug { 
-                println!("[{}] - HTTPS not available\nRequest error: {}\n", target, response.unwrap_err()); 
-                println!("[{}] - Trying plain HTTP...\n", target)
-            }
-            url = format!("http://{}", target);
-            response = reqwest::get(url.as_str());
-            if response.is_ok() { wr.is_http = true; }
+        let mut http_s_ports: Vec<u16> = Vec::new();
+        for def in definitions.clone() {
+            if def.protocol.as_str() != "http/s" { continue; }
+
+            let mut options = def.options.unwrap();
+            http_s_ports.append(&mut options.ports);
         }
-        if response.is_ok() {
-            responses.push((
-                if wr.is_https { 443 } else { 80 },
-                response.unwrap().text().unwrap()
-            ));
-        } else if debug { println!("[{}] - HTTP request error: {}\n", target, response.unwrap_err()); }
+
+        for port in http_s_ports {
+            let mut url: String = format!("https://{}:{}", target, port);
+            let mut response = reqwest::Client::builder()
+                .timeout(Duration::from_secs(10))
+                .build()
+                .unwrap()
+                .get(url.as_str())
+                .send();
+
+            if response.is_ok() { wr.https.push(port); }
+            if response.is_err() {
+                if debug { 
+                    println!("[{}] - HTTPS not available\nRequest error: {}\n", target, response.unwrap_err()); 
+                    println!("[{}] - Trying plain HTTP...\n", target)
+                }
+                url = format!("http://{}:{}", target, port);
+                response = reqwest::Client::builder()
+                    .timeout(Duration::from_secs(10))
+                    .build()
+                    .unwrap()
+                    .get(url.as_str())
+                    .send();
+
+                if response.is_ok() { wr.http.push(port); }
+            }
+            if response.is_ok() {
+                let mut response = response.unwrap();
+                match response.text() {
+                    Err(e) => {
+                        println!("[{}] - HTTP response unwrap error: {}\n", target, e);
+                    },
+                    Ok(text) => {
+                        responses.push((
+                            port,
+                            format!("{}\r\n\r\n{}", response.headers(), text)
+                        ));
+                    },
+                };
+            } else if debug { println!("[{}] - HTTP request error: {}\n", target, response.unwrap_err()); }
+        }
 
         // Tcp/custom
         for def in definitions.clone() {
-            if def.protocol.as_str() != "tcp/custom" {
-                continue;
-            }
+            if def.protocol.as_str() != "tcp/custom" { continue; }
 
             let options = def.options.unwrap();
+            if options.message.is_none() {
+                println!("[ERROR] Missing mandatory option for protocol tcp/custom: 'message'. Service: {}\n", def.name);
+                ::std::process::exit(1);
+            }
+
             for port in options.ports {
                 let response = tcp_custom(
                     target.as_str(),
                     port,
-                    options.message.as_str(),
-                    options.timeout
+                    options.message.clone().unwrap().as_str(),
+                    options.timeout.unwrap_or(true)
                 );
                 
                 if response.is_ok() {
-                    wr.is_tcp_custom == true;
+                    wr.tcp_custom.push(port);
                     responses.push((
                         port,
                         response.unwrap()
@@ -86,8 +122,8 @@ pub fn lac_request_thread(
         }
 
         // Check if there has been at least one successful connection
-        if !wr.is_https && !wr.is_http && !wr.is_tcp_custom {
-            wr.is_request_error = true;
+        if !wr.https.is_empty() && !wr.http.is_empty() && !wr.tcp_custom.is_empty() {
+            wr.unreachable = true;
             return thread_tx.send(wr).unwrap();
         }
 
@@ -130,7 +166,6 @@ pub fn lac_request_thread(
 pub fn tcp_custom(host: &str, port: u16, message: &str, timeout: bool) -> Result<String, String> {
     use std::net::TcpStream;
     use std::io::{Error, Read, Write};
-    use std::time::Duration;
 
     let addr: String = format!("{}:{}", host, port);
 

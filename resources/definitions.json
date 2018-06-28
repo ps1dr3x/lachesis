@@ -2,6 +2,15 @@
     {
         "name": "wordpress",
         "protocol": "http/s",
+        "options": {
+            "ports": [
+                80,
+                443,
+                8080,
+                8081,
+                8090
+            ]
+        },
         "service": {
             "regex": "(?m)<meta name=\"generator\" content=\"WordPress ",
             "log": false
@@ -43,8 +52,8 @@
         "name": "vnc",
         "protocol": "tcp/custom",
         "options": {
-            "timeout": true,
             "ports": [5900],
+            "timeout": true,
             "message": "RFB 003.008\n"
         },
         "service": {
@@ -70,8 +79,8 @@
         "name": "sshd",
         "protocol": "tcp/custom",
         "options": {
-            "timeout": false,
             "ports": [22],
+            "timeout": false,
             "message": "Hey SSH\r\n"
         },
         "service": {
@@ -92,8 +101,8 @@
         "name": "redis",
         "protocol": "tcp/custom",
         "options": {
-            "timeout": true,
             "ports": [6379],
+            "timeout": true,
             "message": "PING\r\n"
         },
         "service": {
@@ -106,6 +115,51 @@
                     "regex": "PONG",
                     "version": "Unprotected instance (no password)",
                     "description": "Unprotected instance (no password)"
+                }
+            ]
+        }
+    },
+    {
+        "name": "webcams",
+        "protocol": "http/s",
+        "options": {
+            "ports": [
+                80,
+                81,
+                82,
+                83,
+                88,
+                443,
+                5001,
+                8010,
+                8060,
+                8080,
+                8081,
+                8083,
+                9000,
+                3000
+            ]
+        },
+        "service": {
+            "regex": "IPCamera_Logo|MJPG-Streamer|(?i)webcam server(?-i)",
+            "log": false
+        },
+        "versions": {
+            "regex": [
+                {
+                    "regex": "IPCamera_Logo",
+                    "version": "MayGion IP camera (admin:admin)",
+                    "description": "MayGion IP camera (admin:admin)"
+                },
+                {
+                    "regex": "MJPG-Streamer",
+                    "version": "MJPG-Streamer",
+                    "description": "MJPG-Streamer"
+                },
+                {
+                    "regex": "(?i)webcam server(?-i)",
+                    "version": "Android webcam",
+                    "description": "Android webcam"
                 }
             ]
         }

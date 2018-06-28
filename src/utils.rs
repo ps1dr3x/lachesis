@@ -87,9 +87,9 @@ pub struct Definition {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Options {
-    pub timeout: bool,
     pub ports: Vec<u16>,
-    pub message: String
+    pub timeout: Option<bool>,
+    pub message: Option<String>
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

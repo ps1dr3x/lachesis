@@ -22,7 +22,7 @@ use utils::LacConf;
 
 struct Stats {
     requests: usize,
-    requests_errors: usize,
+    unreachables: usize,
     requests_https: usize,
     requests_http: usize,
     requests_tcp_custom: usize,
@@ -99,7 +99,7 @@ fn main() {
     // Some stats
     let mut stats = Stats {
         requests: 0,
-        requests_errors: 0,
+        unreachables: 0,
         requests_https: 0,
         requests_http: 0,
         requests_tcp_custom: 0,
@@ -136,10 +136,10 @@ fn main() {
             if conf.debug { println!("Request in thread {} completed\n", wr.thread_id); }
 
             // Increment results variables
-            if wr.is_request_error { stats.requests_errors += 1; }
-            if wr.is_https { stats.requests_https += 1; }
-            if wr.is_http { stats.requests_http += 1; }
-            if wr.is_tcp_custom { stats.requests_tcp_custom += 1; }
+            if wr.unreachable { stats.unreachables += 1; }
+            if !wr.https.is_empty() { stats.requests_https += wr.https.len(); }
+            if !wr.http.is_empty() { stats.requests_http += wr.http.len(); }
+            if !wr.tcp_custom.is_empty() { stats.requests_tcp_custom += wr.tcp_custom.len(); }
 
             // And use its thread_id for a new thread
             wr.thread_id
@@ -164,6 +164,7 @@ fn main() {
 
         // Total requests counter (printed every 500 request)
         stats.requests += 1;
+        println!("Requests: {}\n", stats.requests);
         if stats.requests % 500 == 0 {
             println!("Requests: {}\n", stats.requests);
         }
@@ -182,7 +183,7 @@ fn main() {
         
         Threads: {}
         Requests: {}
-        Connection errors: {}
+        Unreachables: {}
         Https: {}
         Http: {}
         Tcp/custom: {}
@@ -192,7 +193,7 @@ fn main() {
     ",
         n_threads,
         stats.requests,
-        stats.requests_errors,
+        stats.unreachables,
         stats.requests_https,
         stats.requests_http,
         stats.requests_tcp_custom,
