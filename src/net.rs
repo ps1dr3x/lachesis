@@ -14,6 +14,7 @@ use detector::Detector;
 use db::DbMan;
 use unindent::unindent;
 
+#[derive(Debug)]
 pub struct LacResponse {
     pub thread_id: u16,
     pub unreachable: bool,
@@ -55,7 +56,7 @@ pub fn lac_request_thread(
         for port in http_s_ports {
             let mut url: String = format!("https://{}:{}", target, port);
             let mut response = reqwest::Client::builder()
-                .timeout(Duration::from_secs(10))
+                .timeout(Duration::from_secs(5))
                 .build()
                 .unwrap()
                 .get(url.as_str())
@@ -69,7 +70,7 @@ pub fn lac_request_thread(
                 }
                 url = format!("http://{}:{}", target, port);
                 response = reqwest::Client::builder()
-                    .timeout(Duration::from_secs(10))
+                    .timeout(Duration::from_secs(5))
                     .build()
                     .unwrap()
                     .get(url.as_str())
@@ -122,7 +123,7 @@ pub fn lac_request_thread(
         }
 
         // Check if there has been at least one successful connection
-        if !wr.https.is_empty() && !wr.http.is_empty() && !wr.tcp_custom.is_empty() {
+        if wr.https.is_empty() && wr.http.is_empty() && wr.tcp_custom.is_empty() {
             wr.unreachable = true;
             return thread_tx.send(wr).unwrap();
         }
@@ -164,26 +165,33 @@ pub fn lac_request_thread(
 }
 
 pub fn tcp_custom(host: &str, port: u16, message: &str, timeout: bool) -> Result<String, String> {
-    use std::net::TcpStream;
-    use std::io::{Error, Read, Write};
+    use std::net::{ TcpStream, SocketAddr, ToSocketAddrs };
+    use std::io::{ Error, Read, Write };
 
-    let addr: String = format!("{}:{}", host, port);
+    let addr = format!("{}:{}", host, port).to_socket_addrs();
+    if addr.is_err() {
+        return Err(format!("[{}:{}] - TCP stream connection error: \n{}\n", host, port, addr.err().unwrap()));
+    }
 
-    let stream: Result<TcpStream, Error> = TcpStream::connect(&addr);
+    let mut addr: Vec<SocketAddr> = addr.unwrap().collect();
+    let addr = addr.pop().unwrap();
+
+    let stream: Result<TcpStream, Error> = TcpStream::connect_timeout(&addr, Duration::from_secs(5));
     if stream.is_err() {
-        return Err(format!("[{}:{}] - TCP stream connection error: \n{}\n", host, port, stream.err().unwrap()))
+        return Err(format!("[{}:{}] - TCP stream connection error: \n{}\n", host, port, stream.err().unwrap()));
     }
     let mut stream: TcpStream = stream.unwrap();
 
+    stream.set_write_timeout(Some(Duration::from_secs(5))).unwrap();
     let stream_write: Result<(), Error> = stream.write_all(message.as_bytes());
     if stream_write.is_err() {
-        return Err(format!("[{}:{}] - TCP stream write error: \n{}\n", host, port, stream_write.err().unwrap()))
+        return Err(format!("[{}:{}] - TCP stream write error: \n{}\n", host, port, stream_write.err().unwrap()));
     }
 
     let start = Instant::now();
     let mut res_string: String = String::new();
     if timeout {
-        stream.set_read_timeout(Some(Duration::from_millis(200))).unwrap();
+        stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
 
         while start.elapsed().as_secs() < 5 {
             let mut buf = [0];
