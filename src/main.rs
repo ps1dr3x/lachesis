@@ -29,6 +29,26 @@ struct Stats {
     services_found: usize
 }
 
+impl Stats {
+    fn default() -> Stats {
+        Stats {
+            requests: 0,
+            unreachables: 0,
+            requests_https: 0,
+            requests_http: 0,
+            requests_tcp_custom: 0,
+            services_found: 0
+        }
+    }
+
+    pub fn increment(&mut self, lr: &LacResponse) {
+        if lr.unreachable { self.unreachables += 1; }
+        if !lr.https.is_empty() { self.requests_https += lr.https.len(); }
+        if !lr.http.is_empty() { self.requests_http += lr.http.len(); }
+        if !lr.tcp_custom.is_empty() { self.requests_tcp_custom += lr.tcp_custom.len(); }
+    }
+}
+
 fn usage() {
     println!("{}", unindent("
 
@@ -97,14 +117,7 @@ fn main() {
     let definitions = definitions.unwrap();
 
     // Some stats
-    let mut stats = Stats {
-        requests: 0,
-        unreachables: 0,
-        requests_https: 0,
-        requests_http: 0,
-        requests_tcp_custom: 0,
-        services_found: 0
-    };
+    let mut stats = Stats::default();
 
     // Open dns records file and instantiate the reader
     let dns_records_file_path: &Path = Path::new(conf.file_path.as_str());
@@ -132,17 +145,14 @@ fn main() {
             threads.len() as u16
         } else {
             // Otherwise wait the end of one of the active threads
-            let wr: LacResponse = rx.recv().unwrap(); 
-            if conf.debug { println!("Request in thread {} completed\n", wr.thread_id); }
+            let lr: LacResponse = rx.recv().unwrap(); 
+            if conf.debug { println!("Request in thread {} completed\n", lr.thread_id); }
 
             // Increment results variables
-            if wr.unreachable { stats.unreachables += 1; }
-            if !wr.https.is_empty() { stats.requests_https += wr.https.len(); }
-            if !wr.http.is_empty() { stats.requests_http += wr.http.len(); }
-            if !wr.tcp_custom.is_empty() { stats.requests_tcp_custom += wr.tcp_custom.len(); }
+            stats.increment(&lr);
 
             // And use its thread_id for a new thread
-            wr.thread_id
+            lr.thread_id
         };
 
         // Spawn a new thread
@@ -174,6 +184,12 @@ fn main() {
     let mut id: u16 = 0;
     for thread in threads {
         thread.join().expect(&format!("The thread being joined has panicked. ID: {}\n", id));
+
+        let lr: LacResponse = rx.recv().unwrap(); 
+        if conf.debug { println!("Request in thread {} completed\n", lr.thread_id); }
+
+        stats.increment(&lr);
+
         id += 1;
     }
 
