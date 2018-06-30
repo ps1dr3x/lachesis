@@ -81,7 +81,7 @@
         "options": {
             "ports": [22],
             "timeout": false,
-            "message": "Hey SSH\r\n"
+            "message": "Could you kindly tell me if you are sshd?\r\n"
         },
         "service": {
             "regex": "SSH-",
@@ -90,9 +90,14 @@
         "versions": {
             "regex": [
                 {
-                    "regex": "SSH-2.0-OpenSSH_7.7",
-                    "version": "SSH-2.0-OpenSSH_7.7",
-                    "description": "Version SSH-2.0-OpenSSH_7.7"
+                    "regex": "OpenSSH_5.",
+                    "version": "OpenSSH 5.x",
+                    "description": "OpenSSH 5.x (outdated)"
+                },
+                {
+                    "regex": "OpenSSH_6.",
+                    "version": "OpenSSH 6.x",
+                    "description": "OpenSSH 6.x (outdated)"
                 }
             ]
         }
