@@ -5,7 +5,7 @@ pub struct LacConf {
     pub debug: bool,
     pub help: bool,
     pub threads: usize,
-    pub max_requests: usize,
+    pub max_targets: usize,
     pub print_records: bool
 }
 
@@ -17,7 +17,7 @@ pub fn get_cli_params() -> Result<LacConf, String> {
         debug: false,
         help: false,
         threads: 250,
-        max_requests: 10000,
+        max_targets: 10000,
         print_records: false
     };
 
@@ -50,16 +50,16 @@ pub fn get_cli_params() -> Result<LacConf, String> {
                     conf.threads = threads.unwrap();
                 }
             },
-            "--max-requests" => {
+            "--max-targets" => {
                 let arg = args.next();
                 if arg.is_none() {
-                    return Err("Invalid value for parameter --max-requests".to_string());
+                    return Err("Invalid value for parameter --max-targets".to_string());
                 } else {
-                    let max_requests = arg.unwrap().parse::<usize>();
-                    if max_requests.is_err() {
-                        return Err("Invalid value for parameter --max-requests".to_string());
+                    let max_targets = arg.unwrap().parse::<usize>();
+                    if max_targets.is_err() {
+                        return Err("Invalid value for parameter --max-targets".to_string());
                     }
-                    conf.max_requests = max_requests.unwrap();
+                    conf.max_targets = max_targets.unwrap();
                 }
             },
             "--print-records" => {

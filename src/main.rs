@@ -10,17 +10,15 @@ mod db;
 mod net;
 
 use std::{
-    path::Path,
-    fs::File,
     thread,
     sync::mpsc
 };
-use easy_reader::EasyReader;
 use unindent::unindent;
 use net::LacResponse;
 use utils::LacConf;
 
 struct Stats {
+    targets: usize,
     requests: usize,
     unreachables: usize,
     requests_https: usize,
@@ -32,6 +30,7 @@ struct Stats {
 impl Stats {
     fn default() -> Stats {
         Stats {
+            targets: 0,
             requests: 0,
             unreachables: 0,
             requests_https: 0,
@@ -42,10 +41,21 @@ impl Stats {
     }
 
     pub fn increment(&mut self, lr: &LacResponse) {
-        if lr.unreachable { self.unreachables += 1; }
-        if !lr.https.is_empty() { self.requests_https += lr.https.len(); }
-        if !lr.http.is_empty() { self.requests_http += lr.http.len(); }
-        if !lr.tcp_custom.is_empty() { self.requests_tcp_custom += lr.tcp_custom.len(); }
+        self.targets += &lr.targets.len();
+
+        for target in &lr.targets {
+            if target.unreachable {
+                self.unreachables += 1;
+                continue;
+            }
+            self.requests_https += target.https.len();
+            self.requests_http += target.http.len();
+            self.requests_tcp_custom += target.tcp_custom.len();
+            self.requests += self.requests_https +
+                self.requests_http +
+                self.requests_tcp_custom;
+            self.services_found += target.matching as usize;
+        }
     }
 }
 
@@ -59,7 +69,7 @@ fn usage() {
         Optional arguments:
 
         --threads NUM (default: 250)
-        --max-requests NUM (default: 10000)
+        --max-targets NUM (default: 10000)
         --debug
         --print-records
 
@@ -108,6 +118,12 @@ fn main() {
         ::std::process::exit(0);
     }
 
+    // --threads value can't be greater than --max-targets value
+    if conf.threads > conf.max_targets {
+        println!("The number of threads can't be greater than the number of max targets\n");
+        ::std::process::exit(1);
+    }
+
     // Read/validate definitions
     let definitions = utils::read_definitions();
     if definitions.is_err() {
@@ -119,78 +135,32 @@ fn main() {
     // Some stats
     let mut stats = Stats::default();
 
-    // Open dns records file and instantiate the reader
-    let dns_records_file_path: &Path = Path::new(conf.file_path.as_str());
-    let dns_records_file: File = File::open(dns_records_file_path).unwrap();
-    let mut easy_reader: EasyReader = EasyReader::new(dns_records_file).unwrap();
-
     // Threads vector and communication channel
-    let n_threads = conf.threads;
-    let mut threads: Vec<thread::JoinHandle<()>> = Vec::with_capacity(n_threads);
+    let mut threads: Vec<thread::JoinHandle<()>> = Vec::with_capacity(conf.threads);
     let (tx, rx): (mpsc::Sender<LacResponse>, mpsc::Receiver<LacResponse>) = mpsc::channel();
 
-    let n_requests = conf.max_requests;
-    while stats.requests < n_requests {
-        // Pick a random dns record
-        let line_str: String = easy_reader.random_line().unwrap();
-        let line_json: serde_json::Value = serde_json::from_str(&line_str).unwrap();
-
-        // Exclude records which are not of type A
-        if line_json["type"].as_str().unwrap() != "a" {
-            continue;
-        }
-
-        // If there are free slots, pick a thread_id (index of the threads vector) for a new thread
-        let thread_id: u16 = if threads.len() < n_threads {
-            threads.len() as u16
-        } else {
-            // Otherwise wait the end of one of the active threads
-            let lr: LacResponse = rx.recv().unwrap(); 
-            if conf.debug { println!("Request in thread {} completed\n", lr.thread_id); }
-
-            // Increment results variables
-            stats.increment(&lr);
-
-            // And use its thread_id for a new thread
-            lr.thread_id
-        };
-
-        // Spawn a new thread
-        let thread_tx: mpsc::Sender<LacResponse> = tx.clone();
-        let thread: thread::JoinHandle<()> = net::lac_request_thread(
-            thread_tx,
-            thread_id,
+    // Spawn threads
+    for thread_id in 0..conf.threads {
+        let thread = net::lac_worker(
+            tx.clone(),
+            thread_id as u16,
+            conf.file_path.clone(),
             definitions.clone(),
-            line_json["name"].as_str().unwrap().to_string(),
+            (conf.max_targets / conf.threads) as usize,
             conf.debug
         );
-
-        // Push the new thread into the threads vector
-        if threads.len() < n_threads {
-            threads.push(thread);
-        } else {
-            threads[thread_id as usize] = thread;
-        }
-
-        // Total requests counter (printed every 500 request)
-        stats.requests += 1;
-        println!("Requests: {}\n", stats.requests);
-        if stats.requests % 500 == 0 {
-            println!("Requests: {}\n", stats.requests);
-        }
+        threads.push(thread);
     }
 
     // Wait for the end of all threads
-    let mut id: u16 = 0;
-    for thread in threads {
-        thread.join().expect(&format!("The thread being joined has panicked. ID: {}\n", id));
-
-        let lr: LacResponse = rx.recv().unwrap(); 
-        if conf.debug { println!("Request in thread {} completed\n", lr.thread_id); }
+    for n in 0..conf.threads {
+        let lr = rx.recv().unwrap();
+        if conf.debug { println!("Worker {} ended [{}/{}]\n", lr.thread_id, n, conf.threads - 1); }
 
         stats.increment(&lr);
-
-        id += 1;
+    }
+    for thread in threads {
+        thread.join().expect(&format!("The thread being joined has panicked\n"));
     }
 
     // Print results
@@ -198,6 +168,7 @@ fn main() {
         === SCAN TEST COMPLETED ===
         
         Threads: {}
+        Targets: {}
         Requests: {}
         Unreachables: {}
         Https: {}
@@ -207,7 +178,8 @@ fn main() {
         Matching services found: {}
         ===========================
     ",
-        n_threads,
+        conf.threads,
+        stats.targets,
         stats.requests,
         stats.unreachables,
         stats.requests_https,
