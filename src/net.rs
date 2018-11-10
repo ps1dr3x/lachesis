@@ -1,6 +1,9 @@
 extern crate reqwest;
 extern crate unindent;
 extern crate serde_json;
+extern crate hyper;
+extern crate hyper_tls;
+extern crate futures;
 
 use std::{
     thread,
@@ -13,22 +16,34 @@ use std::{
     fs::File
 };
 use utils::Definition;
-use detector::Detector;
-use db::DbMan;
-use unindent::unindent;
 use easy_reader::EasyReader;
+
+use self::futures::{ future, lazy };
+use self::hyper::{
+    Client,
+    rt::{
+        self,
+        Future,
+        Stream
+    }
+};
+use self::hyper_tls::HttpsConnector;
 
 #[derive(Debug)]
 pub struct LacResponse {
     pub thread_id: u16,
-    pub targets: Vec<Target>
+    pub unreachable: bool,
+    pub last: bool,
+    pub target: Target
 }
 
 impl LacResponse {
     fn default() -> LacResponse {
         LacResponse {
             thread_id: 0,
-            targets: Vec::new()
+            unreachable: false,
+            last: false,
+            target: Target::default()
         }
     }
 
@@ -40,25 +55,21 @@ impl LacResponse {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Target {
     pub host: String,
-    pub unreachable: bool,
-    pub https: Vec<u16>,
-    pub http: Vec<u16>,
-    pub tcp_custom: Vec<u16>,
-    pub matching: u16
+    pub port: u16,
+    pub protocol: String,
+    pub response: String
 }
 
 impl Target {
     fn default() -> Target {
         Target {
             host: "".to_string(),
-            unreachable: false,
-            https: Vec::new(),
-            http: Vec::new(),
-            tcp_custom: Vec::new(),
-            matching: 0
+            port: 0,
+            protocol: "".to_string(),
+            response: "".to_string()
         }
     }
 
@@ -78,205 +89,225 @@ pub fn lac_worker(
         requests: usize,
         debug: bool
     ) -> thread::JoinHandle<()> {
-    if debug { println!("Spawning new worker. ID: {}\n", thread_id); }
+    if debug { println!("Spawning new worker. ID: {}", thread_id); }
 
     thread::spawn(move || {
-        let mut lr = LacResponse::new(thread_id);
+        let out_tx = thread_tx.clone();
 
-        // Open dns records file and instantiate the reader
-        let dns_records_file_path: &Path = Path::new(file_path.as_str());
-        let dns_records_file: File = File::open(dns_records_file_path).unwrap();
-        let mut easy_reader: EasyReader = EasyReader::new(dns_records_file).unwrap();
+        rt::run(lazy(move || {
+            // Open dns records file and instantiate the reader
+            let dns_records_file_path = Path::new(file_path.as_str());
+            let dns_records_file = File::open(dns_records_file_path).unwrap();
+            let mut easy_reader = EasyReader::new(dns_records_file).unwrap();
 
-        let mut rq = 0;
-        while rq < requests {
-            let mut responses: Vec<(u16, String)> = Vec::new();
+            let mut req = 0;
+            while req < requests {
+                // Pick a random dns record and exclude records which are not of type A
+                let line_str = easy_reader.random_line().unwrap();
+                let line_json: serde_json::Value = serde_json::from_str(&line_str).unwrap();
+                if line_json["type"].as_str().unwrap() != "a" { continue; }
 
-            // Pick a random dns record and exclude records which are not of type A
-            let line_str: String = easy_reader.random_line().unwrap();
-            let line_json: serde_json::Value = serde_json::from_str(&line_str).unwrap();
-            if line_json["type"].as_str().unwrap() != "a" { continue; }
+                let target = Target::new(line_json["name"].as_str().unwrap().to_string());
 
-            let mut target = Target::new(line_json["name"].as_str().unwrap().to_string());
+                // Http/s
+                let mut http_s_ports: Vec<u16> = Vec::new();
+                for def in definitions.clone() {
+                    if def.protocol.as_str() != "http/s" { continue; }
 
-            // Http/s
-            let mut http_s_ports: Vec<u16> = Vec::new();
-            for def in definitions.clone() {
-                if def.protocol.as_str() != "http/s" { continue; }
+                    let mut options = def.options.unwrap();
+                    http_s_ports.append(&mut options.ports);
+                }
+                http_s(thread_id, thread_tx.clone(), target.clone(), http_s_ports, debug);
 
-                let mut options = def.options.unwrap();
-                http_s_ports.append(&mut options.ports);
-            }
+                // Tcp/custom
+                for def in definitions.clone() {
+                    if def.protocol.as_str() != "tcp/custom" { continue; }
 
-            for port in http_s_ports {
-                let mut url: String = format!("https://{}:{}", target.host, port);
-                let mut response = reqwest::Client::builder()
-                    .timeout(Duration::from_secs(5))
-                    .build()
-                    .unwrap()
-                    .get(url.as_str())
-                    .send();
-
-                if response.is_ok() { target.https.push(port); }
-                if response.is_err() {
-                    if debug { 
-                        println!("[{}] - HTTPS not available\nRequest error: {}\n", target.host, response.unwrap_err());
-                        println!("[{}] - Trying plain HTTP...\n", target.host)
+                    let options = def.options.unwrap();
+                    if options.message.is_none() {
+                        println!("[ERROR] Missing mandatory option for protocol tcp/custom: 'message'. Service: {}\n", def.name);
+                        ::std::process::exit(1);
                     }
-                    url = format!("http://{}:{}", target.host, port);
-                    response = reqwest::Client::builder()
-                        .timeout(Duration::from_secs(5))
-                        .build()
-                        .unwrap()
-                        .get(url.as_str())
-                        .send();
-
-                    if response.is_ok() { target.http.push(port); }
-                }
-                if response.is_ok() {
-                    let mut response = response.unwrap();
-                    match response.text() {
-                        Err(e) => {
-                            println!("[{}] - HTTP response unwrap error: {}\n", target.host, e);
-                        },
-                        Ok(text) => {
-                            responses.push((
-                                port,
-                                format!("{}\r\n\r\n{}", response.headers(), text)
-                            ));
-                        },
-                    };
-                } else if debug { println!("[{}] - HTTP request error: {}\n", target.host, response.unwrap_err()); }
-            }
-
-            // Tcp/custom
-            for def in definitions.clone() {
-                if def.protocol.as_str() != "tcp/custom" { continue; }
-
-                let options = def.options.unwrap();
-                if options.message.is_none() {
-                    println!("[ERROR] Missing mandatory option for protocol tcp/custom: 'message'. Service: {}\n", def.name);
-                    ::std::process::exit(1);
-                }
-
-                for port in options.ports {
-                    let response = tcp_custom(
-                        target.host.as_str(),
-                        port,
+                    tcp_custom(
+                        thread_id,
+                        thread_tx.clone(),
+                        target.clone(),
+                        options.ports,
                         options.message.clone().unwrap().as_str(),
-                        options.timeout.unwrap_or(true)
+                        options.timeout.unwrap_or(true),
+                        debug
                     );
-                    
-                    if response.is_ok() {
-                        target.tcp_custom.push(port);
-                        responses.push((
-                            port,
-                            response.unwrap()
-                        ));
-                    } else if debug { println!("{}", response.unwrap_err()); }
                 }
+
+                req += 1;
             }
 
-            // Check if there has been at least one successful connection
-            if target.https.is_empty() && target.http.is_empty() && target.tcp_custom.is_empty() {
-                target.unreachable = true;
+            future::ok(())
+        }));
 
-                lr.targets.push(target);
-                rq += 1;
-                continue;
-            }
-
-            // Detection
-            for res in responses {
-                let mut detector: Detector = Detector::new(definitions.clone());
-                detector.run(
-                    target.host.clone(),
-                    res.0,
-                    res.1
-                );
-
-                if !detector.response.is_empty() {
-                    target.matching = detector.response.len() as u16;
-
-                    for res in detector.response {
-                        println!("{}", unindent(format!("
-                            ===
-                            Matching service found: {}
-                            Service: {}
-                            Version: {}
-                            ===
-                        ",
-                            target.host,
-                            res.service,
-                            res.version).as_str())
-                        );
-
-                        let dbm: DbMan = DbMan::new();
-                        dbm.save_service(res).unwrap();
-                    }
-                }
-            }
-
-            lr.targets.push(target);
-            rq += 1;
-        }
-
-        // Send result message
-        thread_tx.send(lr).unwrap();
+        let mut lr = LacResponse::new(thread_id);
+        lr.last = true;
+        out_tx.send(lr).unwrap();
     })
 }
 
-pub fn tcp_custom(host: &str, port: u16, message: &str, timeout: bool) -> Result<String, String> {
+fn http_s(
+        thread_id: u16,
+        thread_tx: mpsc::Sender<LacResponse>,
+        mut target: Target,
+        http_s_ports: Vec<u16>,
+        debug: bool
+    ) {
+    for port in http_s_ports {
+        let thread_tx_https_ok = thread_tx.clone();
+        let thread_tx_http_ok = thread_tx.clone();
+        let thread_tx_err = thread_tx.clone();
+
+        target.port = port;
+        let target_https = target.clone();
+        let target_http = target.clone();
+
+        if debug { println!("New target: {}", target.host); }
+
+        let https = HttpsConnector::new(4).expect("TLS initialization failed");
+        let client = Client::builder()
+            .keep_alive(false)
+            .retry_canceled_requests(false)
+            .build::<_, hyper::Body>(https);
+
+        let req_fut = client.get(format!("https://{}:{}", target_https.host, port).parse().unwrap())
+            .and_then(|res| {
+                res.into_body().concat2()
+            })
+            .map(move |content| {
+                // TODO - Add headers
+                let mut lr = LacResponse::new(thread_id);
+                lr.target.protocol = "https".to_string();
+                lr.target.response = String::from_utf8(content.to_vec()).unwrap_or("".to_string());
+                thread_tx_https_ok.send(lr).unwrap();
+            })
+            .map_err(move |err| {
+                if debug { 
+                    println!("[{}] - HTTPS not available. Error: {}", target_https.host, err);
+                    println!("[{}] - Trying plain HTTP...", target_https.host)
+                }
+                let req_fut = client.get(format!("http://{}:{}", target_http.host, port).parse().unwrap())
+                    .and_then(|res| {
+                        res.into_body().concat2()
+                    })
+                    .map(move |content| {
+                        let mut lr = LacResponse::new(thread_id);
+                        lr.target.protocol = "http".to_string();
+                        lr.target.response = String::from_utf8(content.to_vec()).unwrap_or("".to_string());
+                        thread_tx_http_ok.send(lr).unwrap();
+                    })
+                    .map_err(move |err| {
+                        if debug {
+                            println!("[{}] - HTTP request error: {}", target_http.host, err);
+                        }
+                        let mut lr = LacResponse::new(thread_id);
+                        lr.unreachable = true;
+                        thread_tx_err.send(lr).unwrap();
+                    });
+                rt::spawn(req_fut);
+            });
+        rt::spawn(req_fut);
+    }
+}
+
+pub fn tcp_custom(
+        thread_id: u16,
+        thread_tx: mpsc::Sender<LacResponse>,
+        mut target: Target,
+        ports: Vec<u16>,
+        message: &str,
+        timeout: bool,
+        debug: bool
+    ) {
     use std::net::{ TcpStream, SocketAddr, ToSocketAddrs };
     use std::io::{ Error, Read, Write };
 
-    let addr = format!("{}:{}", host, port).to_socket_addrs();
-    if addr.is_err() {
-        return Err(format!("[{}:{}] - TCP stream connection error: \n{}\n", host, port, addr.err().unwrap()));
-    }
+    for port in ports {
+        let mut lr = LacResponse::new(thread_id);
 
-    let mut addr: Vec<SocketAddr> = addr.unwrap().collect();
-    let addr = addr.pop().unwrap();
+        target.port = port;
 
-    let stream: Result<TcpStream, Error> = TcpStream::connect_timeout(&addr, Duration::from_secs(5));
-    if stream.is_err() {
-        return Err(format!("[{}:{}] - TCP stream connection error: \n{}\n", host, port, stream.err().unwrap()));
-    }
-    let mut stream: TcpStream = stream.unwrap();
-
-    stream.set_write_timeout(Some(Duration::from_secs(5))).unwrap();
-    let stream_write: Result<(), Error> = stream.write_all(message.as_bytes());
-    if stream_write.is_err() {
-        return Err(format!("[{}:{}] - TCP stream write error: \n{}\n", host, port, stream_write.err().unwrap()));
-    }
-
-    let start = Instant::now();
-    let mut res_string: String = String::new();
-    if timeout {
-        stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
-
-        while start.elapsed().as_secs() < 5 {
-            let mut buf = [0];
-            match stream.read(&mut buf) {
-                Err(e) => {
-                    if res_string.len() > 0 { break; }
-                    return Err(format!("[{}:{}] - TCP stream read error: {}\n", host, port, e));
-                },
-                Ok(m) => {
-                    if m == 0 {
-                        return Err(format!("[{}:{}] - TCP stream read error: \nempty response\n", host, port));
-                    }
-                    res_string += String::from_utf8(buf.to_vec()).unwrap().as_str();
-                },
-            };
+        let addr = format!("{}:{}", target.host, port).to_socket_addrs();
+        if addr.is_err() {
+            if debug {
+                println!("[{}:{}] - TCP stream connection error: {}\n", target.host, port, addr.err().unwrap());
+            }
+            lr.unreachable = true;
+            thread_tx.send(lr).unwrap();
+            continue;
         }
-    } else {
-        if stream.read_to_string(&mut res_string).unwrap_or(0) == 0 {
-            return Err(format!("[{}:{}] - TCP stream read error: \nempty response\n", host, port));
+
+        let mut addr: Vec<SocketAddr> = addr.unwrap().collect();
+        let addr = addr.pop().unwrap();
+
+        let stream: Result<TcpStream, Error> = TcpStream::connect_timeout(&addr, Duration::from_secs(5));
+        if stream.is_err() {
+            if debug {
+                println!("[{}:{}] - TCP stream connection error: {}\n", target.host, port, stream.err().unwrap());
+            }
+            lr.unreachable = true;
+            thread_tx.send(lr).unwrap();
+            continue;
+        }
+        let mut stream: TcpStream = stream.unwrap();
+
+        stream.set_write_timeout(Some(Duration::from_secs(5))).unwrap();
+        let stream_write: Result<(), Error> = stream.write_all(message.as_bytes());
+        if stream_write.is_err() {
+            if debug {
+                println!("[{}:{}] - TCP stream write error: {}\n", target.host, port, stream_write.err().unwrap());
+            }
+            lr.unreachable = true;
+            thread_tx.send(lr).unwrap();
+            continue;
+        }
+
+        let start = Instant::now();
+        let mut res_string: String = String::new();
+        if timeout {
+            stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+
+            while start.elapsed().as_secs() < 5 {
+                let mut buf = [0];
+                match stream.read(&mut buf) {
+                    Err(e) => {
+                        if res_string.len() > 0 { break; }
+                        if debug {
+                            println!("[{}:{}] - TCP stream read error: {}\n", target.host, port, e);
+                        }
+                        lr.unreachable = true;
+                        thread_tx.send(lr).unwrap();
+                        break;
+                    },
+                    Ok(m) => {
+                        if m == 0 {
+                            if debug {
+                                println!("[{}:{}] - TCP stream read error: empty response\n", target.host, port);
+                            }
+                            lr.unreachable = true;
+                            thread_tx.send(lr).unwrap();
+                            break;
+                        }
+                        res_string += String::from_utf8(buf.to_vec()).unwrap().as_str();
+                    },
+                };
+            }
+        } else {
+            if stream.read_to_string(&mut res_string).unwrap_or(0) == 0 {
+                if debug {
+                    println!("[{}:{}] - TCP stream read error: empty response\n", target.host, port);
+                }
+                lr.unreachable = true;
+                thread_tx.send(lr).unwrap();
+                continue;
+            }
         }
     }
-
-    Ok(res_string)
 }
 
 #[allow(dead_code)]

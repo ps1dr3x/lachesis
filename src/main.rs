@@ -15,49 +15,8 @@ use std::{
 };
 use unindent::unindent;
 use net::LacResponse;
-use utils::LacConf;
-
-struct Stats {
-    targets: usize,
-    requests: usize,
-    unreachables: usize,
-    requests_https: usize,
-    requests_http: usize,
-    requests_tcp_custom: usize,
-    services_found: usize
-}
-
-impl Stats {
-    fn default() -> Stats {
-        Stats {
-            targets: 0,
-            requests: 0,
-            unreachables: 0,
-            requests_https: 0,
-            requests_http: 0,
-            requests_tcp_custom: 0,
-            services_found: 0
-        }
-    }
-
-    pub fn increment(&mut self, lr: &LacResponse) {
-        self.targets += &lr.targets.len();
-
-        for target in &lr.targets {
-            if target.unreachable {
-                self.unreachables += 1;
-                continue;
-            }
-            self.requests_https += target.https.len();
-            self.requests_http += target.http.len();
-            self.requests_tcp_custom += target.tcp_custom.len();
-            self.requests += self.requests_https +
-                self.requests_http +
-                self.requests_tcp_custom;
-            self.services_found += target.matching as usize;
-        }
-    }
-}
+use detector::Detector;
+use db::DbMan;
 
 fn usage() {
     println!("{}", unindent("
@@ -89,13 +48,14 @@ fn main() {
     "));
 
     // Check cli parameters
-    let conf = utils::get_cli_params();
-    if conf.is_err() {
-        println!("{}", conf.err().unwrap());
-        usage();
-        ::std::process::exit(1);
-    }
-    let conf: LacConf = conf.unwrap();
+    let conf = match utils::get_cli_params() {
+        Ok(conf) => conf,
+        Err(err) => {
+            println!("{}", err);
+            usage();
+            ::std::process::exit(1);
+        }
+    };
 
     // --help option specified. Print usage and exit
     if conf.help {
@@ -108,7 +68,7 @@ fn main() {
         let dbm = db::DbMan::new();
         let records = dbm.get_all_services().unwrap();
         if records.is_empty() {
-            println!("Db is empty or not created yet\n");
+            println!("Db is empty or not exists yet\n");
             return;
         }
         println!("{} records:\n", records.len());
@@ -119,53 +79,102 @@ fn main() {
     }
 
     // --threads value can't be greater than --max-targets value
-    if conf.threads > conf.max_targets {
+    if conf.threads as usize > conf.max_targets {
         println!("The number of threads can't be greater than the number of max targets\n");
         ::std::process::exit(1);
     }
 
     // Read/validate definitions
-    let definitions = utils::read_definitions();
-    if definitions.is_err() {
-        println!("Definitions validation failed. Error:\n{}", definitions.unwrap_err());
-        ::std::process::exit(1);
-    }
-    let definitions = definitions.unwrap();
+    let definitions = match utils::read_definitions() {
+        Ok(definitions) => definitions,
+        Err(err) => {
+            println!("Definitions validation failed. Error:\n{}", err);
+            ::std::process::exit(1);
+        }
+    };
 
     // Some stats
-    let mut stats = Stats::default();
+    let mut stats = utils::Stats::default();
 
     // Threads vector and communication channel
-    let mut threads: Vec<thread::JoinHandle<()>> = Vec::with_capacity(conf.threads);
+    let mut threads: Vec<thread::JoinHandle<()>> = Vec::with_capacity(conf.threads as usize);
     let (tx, rx): (mpsc::Sender<LacResponse>, mpsc::Receiver<LacResponse>) = mpsc::channel();
 
-    // Spawn threads
+    // Spawn workers
+    let targets_per_thread = (conf.max_targets as f32 / conf.threads as f32) as usize;
     for thread_id in 0..conf.threads {
         let thread = net::lac_worker(
             tx.clone(),
-            thread_id as u16,
+            thread_id,
             conf.file_path.clone(),
             definitions.clone(),
-            (conf.max_targets / conf.threads) as usize,
+            targets_per_thread,
             conf.debug
         );
         threads.push(thread);
     }
 
-    // Wait for the end of all threads
-    for n in 0..conf.threads {
-        let lr = rx.recv().unwrap();
-        if conf.debug { println!("Worker {} ended [{}/{}]\n", lr.thread_id, n, conf.threads - 1); }
+    // Manage workers messages
+    let mut running_threads = conf.threads;
+    while running_threads > 0 {
+        let lr = match rx.try_recv() {
+            Ok(lr) => lr,
+            Err(_err) => {
+                continue;
+            }
+        };
 
-        stats.increment(&lr);
+        if lr.last {
+            running_threads -= 1;
+            continue;
+        }
+
+        if conf.debug { println!("Message from worker: {}", lr.thread_id); }
+
+        let mut matching = false;
+        if !lr.unreachable && !lr.target.response.is_empty() {
+            let mut detector = Detector::new(definitions.clone());
+            detector.run(
+                lr.target.host.clone(),
+                lr.target.port,
+                lr.target.response.clone()
+            );
+
+            if !detector.response.is_empty() {
+                for res in detector.response {
+                    println!("{}", unindent(format!("
+
+                        ===
+                        Matching service found: {}
+                        Service: {}
+                        Version: {}
+                        ===
+
+                    ",
+                        res.host,
+                        res.service,
+                        res.version).as_str())
+                    );
+
+                    let dbm: DbMan = DbMan::new();
+                    dbm.save_service(res).unwrap();
+                    matching = true;
+                }
+            }
+        }
+
+        stats.increment(lr.unreachable, lr.target.protocol.clone(), matching);
     }
+
+    // Join all the threads
     for thread in threads {
         thread.join().expect(&format!("The thread being joined has panicked\n"));
     }
 
-    // Print results
+    // Print stats
     println!("{}", unindent(format!("
-        === SCAN TEST COMPLETED ===
+
+        ===== SCAN  COMPLETED =====
         
         Threads: {}
         Targets: {}
@@ -177,6 +186,7 @@ fn main() {
 
         Matching services found: {}
         ===========================
+
     ",
         conf.threads,
         stats.targets,

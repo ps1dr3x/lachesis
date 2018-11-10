@@ -52,12 +52,12 @@ impl Detector {
 
     fn detect(&mut self) {
         for def in &self.definitions {
-            let mut response =  DetectorResponse {
+            let mut response = DetectorResponse {
                 service: "".to_string(),
                 version: "".to_string(),
                 description: "".to_string(),
-                host: "".to_string(),
-                port: 0
+                host: self.host.clone(),
+                port: self.port.clone()
             };
 
             let re = Regex::new(def.service.regex.as_str()).unwrap();
@@ -91,7 +91,7 @@ impl Detector {
 
                 let parsed_ver = Version::parse(response.version.as_str());
                 if parsed_ver.is_err() {
-                    println!("[{}:{}] - Unknown or invalid semver: {}\n", self.host, self.port, response.version);
+                    println!("[{}:{}] - Unknown or invalid semver: {}", self.host, self.port, response.version);
                     continue;
                 }
 

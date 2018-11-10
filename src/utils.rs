@@ -4,7 +4,7 @@ pub struct LacConf {
     pub file_path: String,
     pub debug: bool,
     pub help: bool,
-    pub threads: usize,
+    pub threads: u16,
     pub max_targets: usize,
     pub print_records: bool
 }
@@ -43,7 +43,7 @@ pub fn get_cli_params() -> Result<LacConf, String> {
                 if arg.is_none() {
                     return Err("Invalid value for parameter --threads".to_string());
                 } else {
-                    let threads = arg.unwrap().parse::<usize>();
+                    let threads = arg.unwrap().parse::<u16>();
                     if threads.is_err() {
                         return Err("Invalid value for parameter --threads".to_string());
                     }
@@ -137,5 +137,50 @@ pub fn read_definitions() -> Result<Vec<Definition>, String> {
     match definitions {
         Ok(definitions) => Ok(definitions),
         Err(err) => Err(format!("JSON parser error: {}", err))
+    }
+}
+
+pub struct Stats {
+    pub targets: usize,
+    pub requests: usize,
+    pub unreachables: usize,
+    pub requests_https: usize,
+    pub requests_http: usize,
+    pub requests_tcp_custom: usize,
+    pub services_found: usize
+}
+
+impl Stats {
+    pub fn default() -> Stats {
+        Stats {
+            targets: 0,
+            requests: 0,
+            unreachables: 0,
+            requests_https: 0,
+            requests_http: 0,
+            requests_tcp_custom: 0,
+            services_found: 0
+        }
+    }
+
+    pub fn increment(&mut self, unreachable: bool, protocol: String, matching: bool) {
+        if unreachable {
+            self.unreachables += 1
+        }
+
+        match protocol.as_str() {
+            "https" => {
+                self.requests_https += 1;
+            },
+            "http" => {
+                self.requests_http += 1;
+            },
+            "tcp/custom" => {
+                self.requests_tcp_custom += 1;
+            }
+            _ => ()
+        }
+
+        if matching { self.services_found += 1; }
     }
 }
