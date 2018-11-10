@@ -103,14 +103,21 @@ fn main() {
     // Spawn workers
     let targets_per_thread = (conf.max_targets as f32 / conf.threads as f32) as usize;
     for thread_id in 0..conf.threads {
-        let thread = net::lac_worker(
-            tx.clone(),
-            thread_id,
-            conf.file_path.clone(),
-            definitions.clone(),
-            targets_per_thread,
-            conf.debug
-        );
+        let thread_tx = tx.clone();
+        let file_path = conf.file_path.clone();
+        let definitions = definitions.clone();
+        let debug = conf.debug;
+        let thread = thread::spawn(move || {
+            let mut worker = net::LacWorker::new(
+                thread_tx,
+                thread_id,
+                file_path,
+                definitions,
+                targets_per_thread,
+                debug
+            );
+            worker.run();
+        });
         threads.push(thread);
     }
 
