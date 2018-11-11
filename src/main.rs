@@ -27,15 +27,15 @@ fn usage() {
 
         Optional arguments:
 
-        --threads NUM (default: 250)
-        --max-targets NUM (default: 10000)
+        --threads NUM (default: 4)
+        --max-targets NUM (default: 1000)
         --debug
         --print-records
 
     "));
 }
 
-fn main() {
+fn lachesis() -> Result<(), i32> {
     println!("{}", unindent("
 
         
@@ -53,14 +53,14 @@ fn main() {
         Err(err) => {
             println!("{}", err);
             usage();
-            ::std::process::exit(1);
+            return Err(1);
         }
     };
 
     // --help option specified. Print usage and exit
     if conf.help {
         usage();
-        ::std::process::exit(0);
+        return Ok(());
     }
 
     // --print-records option specified. Print records and exit
@@ -69,27 +69,21 @@ fn main() {
         let records = dbm.get_all_services().unwrap();
         if records.is_empty() {
             println!("Db is empty or not exists yet\n");
-            return;
+            return Ok(());
         }
         println!("{} records:\n", records.len());
         for rec in records {
             println!("{:?}", rec);
         }
-        ::std::process::exit(0);
-    }
-
-    // --threads value can't be greater than --max-targets value
-    if conf.threads as usize > conf.max_targets {
-        println!("The number of threads can't be greater than the number of max targets\n");
-        ::std::process::exit(1);
+        return Ok(());
     }
 
     // Read/validate definitions
-    let definitions = match utils::read_definitions() {
+    let definitions = match utils::read_validate_definitions() {
         Ok(definitions) => definitions,
         Err(err) => {
-            println!("Definitions validation failed. Error:\n{}", err);
-            ::std::process::exit(1);
+            println!("Definitions validation failed. Error: {}", err);
+            return Err(1);
         }
     };
 
@@ -204,4 +198,13 @@ fn main() {
         stats.requests_tcp_custom,
         stats.services_found).as_str())
     );
+
+    Ok(())
+}
+
+fn main() {
+    ::std::process::exit(match lachesis() {
+       Ok(_) => 0,
+       Err(exit_code) => exit_code
+    });
 }

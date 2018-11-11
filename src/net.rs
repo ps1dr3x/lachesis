@@ -13,7 +13,7 @@ use std::{
     path::Path,
     fs::File
 };
-use utils::Definition;
+use utils::{ Definition, Options };
 use easy_reader::EasyReader;
 
 use self::futures::{ future, lazy };
@@ -110,8 +110,6 @@ impl LacWorker {
     pub fn run(&mut self) {
         if self.debug { println!("Spawning new worker. ID: {}", self.thread_id); }
 
-        let out_tx = self.thread_tx.clone();
-
         let thread_tx = self.thread_tx.clone();
         let file_path = self.file_path.clone();
         let requests = self.requests.clone();
@@ -138,41 +136,32 @@ impl LacWorker {
                 let mut http_s_ports: Vec<u16> = Vec::new();
                 for def in definitions.clone() {
                     if def.protocol.as_str() != "http/s" { continue; }
-
-                    let mut options = def.options.unwrap();
-                    http_s_ports.append(&mut options.ports);
+                    http_s_ports.append(&mut def.options.ports.clone());
                 }
                 LacWorker::http_s(thread_id, thread_tx.clone(), target.clone(), http_s_ports, debug);
 
                 // Tcp/custom
                 for def in definitions.clone() {
                     if def.protocol.as_str() != "tcp/custom" { continue; }
-
-                    let options = def.options.unwrap();
-                    if options.message.is_none() {
-                        println!("[ERROR] Missing mandatory option for protocol tcp/custom: 'message'. Service: {}\n", def.name);
-                        ::std::process::exit(1);
-                    }
                     LacWorker::tcp_custom(
                         thread_id,
                         thread_tx.clone(),
                         target.clone(),
-                        options.ports,
-                        options.message.clone().unwrap().as_str(),
-                        options.timeout.unwrap_or(true),
+                        def.options.clone(),
                         debug
                     );
                 }
 
                 req += 1;
+                if req == requests {
+                    let mut lr = LacResponse::new(thread_id);
+                    lr.last = true;
+                    thread_tx.send(lr).unwrap();
+                }
             }
 
             future::ok(())
         }));
-
-        let mut lr = LacResponse::new(thread_id);
-        lr.last = true;
-        out_tx.send(lr).unwrap();
     }
 
     fn http_s(
@@ -243,15 +232,13 @@ impl LacWorker {
             thread_id: u16,
             thread_tx: mpsc::Sender<LacResponse>,
             mut target: Target,
-            ports: Vec<u16>,
-            message: &str,
-            timeout: bool,
+            options: Options,
             debug: bool
         ) {
         use std::net::{ TcpStream, SocketAddr, ToSocketAddrs };
         use std::io::{ Error, Read, Write };
 
-        for port in ports {
+        for port in options.ports {
             let mut lr = LacResponse::new(thread_id);
 
             target.port = port;
@@ -281,7 +268,7 @@ impl LacWorker {
             let mut stream: TcpStream = stream.unwrap();
 
             stream.set_write_timeout(Some(Duration::from_secs(5))).unwrap();
-            let stream_write: Result<(), Error> = stream.write_all(message.as_bytes());
+            let stream_write: Result<(), Error> = stream.write_all(options.message.clone().unwrap().as_bytes());
             if stream_write.is_err() {
                 if debug {
                     println!("[{}:{}] - TCP stream write error: {}\n", target.host, port, stream_write.err().unwrap());
@@ -293,7 +280,7 @@ impl LacWorker {
 
             let start = Instant::now();
             let mut res_string: String = String::new();
-            if timeout {
+            if options.timeout.unwrap_or(true) {
                 stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
 
                 while start.elapsed().as_secs() < 5 {
@@ -370,32 +357,4 @@ pub fn ip_range(ip1: &str, ip2: &str) {
         println!("{}", format!("{}.{}.{}.{}", i >> 24 & 0xff, i >> 16 & 0xff, i >> 8 & 0xff, i & 0xff));
         i += 1
     }
-}
-
-#[allow(dead_code)]
-pub fn get(host: &str, port: u16, path: &str) -> Result<String, String> {
-    use std::net::TcpStream;
-    use std::io::{Error, Read, Write};
-
-    let addr: String = format!("{}:{}", host, port);
-
-    let stream: Result<TcpStream, Error> = TcpStream::connect(&addr);
-    if stream.is_err() {
-        return Err(format!("Stream connect error: \n{}\n", stream.err().unwrap()))
-    }
-    let mut stream: TcpStream = stream.unwrap();
-
-    let header = format!("GET {} HTTP/1.1\r\n Host: {} \r\n User-Agent: h3ist/6.6.6 \r\n Accept: */* \r\n\r\n", path, addr);
-
-    let stream_write: Result<(), Error> = stream.write_all(header.as_bytes());
-    if stream_write.is_err() {
-        return Err(format!("Stream write error: \n{}\n", stream_write.err().unwrap()))
-    }
-
-    let mut res_string: String = String::new();
-    if stream.read_to_string(&mut res_string).unwrap() == 0 {
-        return Err(format!("Stream read error: \nempty response\n"));
-    }
-
-    Ok(res_string)
 }
