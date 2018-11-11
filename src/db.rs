@@ -1,6 +1,11 @@
 extern crate rusqlite;
 
-use self::rusqlite::{ Connection, Error };
+use self::rusqlite::{
+    Connection,
+    Error,
+    NO_PARAMS,
+    types::ToSql
+};
 use std::path::Path;
 use detector::DetectorResponse;
 
@@ -33,14 +38,14 @@ impl DbMan {
                 host            TEXT NOT NULL,
                 port            INTEGER NOT NULL
             )
-        ", &[]).unwrap();
+        ", NO_PARAMS).unwrap();
 
         DbMan {
             conn
         }
     }
 
-    pub fn save_service(&self, service: DetectorResponse) -> Result<i32, Error> {
+    pub fn save_service(&self, service: DetectorResponse) -> Result<usize, Error> {
         self.conn.execute("
             INSERT INTO services (service, version, description, host, port)
             VALUES (?1, ?2, ?3, ?4, ?5)
@@ -49,7 +54,7 @@ impl DbMan {
                 &service.version,
                 &service.description,
                 &service.host,
-                &service.port
+                &service.port as &ToSql
             ]
         )
     }
@@ -71,7 +76,7 @@ impl DbMan {
         }
         let mut qy = qy.unwrap();
 
-        let services_iter = qy.query_map(&[], |row| {
+        let services_iter = qy.query_map(NO_PARAMS, |row| {
             ServicesResult {
                 id: row.get(0),
                 time_created: row.get(1),

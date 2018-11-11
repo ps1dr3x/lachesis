@@ -1,4 +1,3 @@
-extern crate reqwest;
 extern crate unindent;
 extern crate serde_json;
 extern crate hyper;
@@ -129,7 +128,7 @@ impl LacWorker {
             let mut req = 0;
             while req < requests {
                 // Pick a random dns record and exclude records which are not of type A
-                let line_str = easy_reader.random_line().unwrap();
+                let line_str = easy_reader.random_line().unwrap().unwrap();
                 let line_json: serde_json::Value = serde_json::from_str(&line_str).unwrap();
                 if line_json["type"].as_str().unwrap() != "a" { continue; }
 
