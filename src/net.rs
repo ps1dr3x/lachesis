@@ -143,7 +143,7 @@ impl LacWorker {
                         if debug { println!("New target. Host lookup: {} -> {:?}", target.host, ip); }
                     },
                     Err(err) => {
-                        println!("[{}] - Host lookup failed. Error: {}", target.host, err);
+                        if debug { println!("[{}] - Host lookup failed. Error: {}", target.host, err); }
                         let mut lr = LacResponse::new(thread_id);
                         lr.unreachable = true;
                         thread_tx.send(lr).unwrap();
@@ -191,65 +191,44 @@ impl LacWorker {
             http_s_ports: Vec<u16>,
             debug: bool
         ) {
-        // TODO - Separate futures/timeouts for https and http
         for port in http_s_ports {
-            let thread_tx_https_ok = thread_tx.clone();
-            let thread_tx_http_ok = thread_tx.clone();
-
-            let target_https = target.clone();
-            let target_http = target.clone();
-            let target_err = target.clone();
-
             let https = HttpsConnector::new(4).expect("TLS initialization failed");
             let client = Client::builder()
                 .keep_alive_timeout(Duration::from_secs(1))
                 .retry_canceled_requests(false)
                 .build::<_, hyper::Body>(https);
 
-            let req_fut = client.get(format!("https://{}:{}", target_https.host, port).parse().unwrap())
-                .and_then(|res| {
-                    res.into_body().concat2()
-                })
-                .map(move |content| {
-                    // TODO - Add headers
-                    let mut lr = LacResponse::new(thread_id);
-                    lr.target.host = target_https.host;
-                    lr.target.port = port;
-                    lr.target.protocol = "https".to_string();
-                    lr.target.response = String::from_utf8(content.to_vec()).unwrap_or("".to_string());
-                    thread_tx_https_ok.send(lr).unwrap();
-                })
-                .map_err(move |err| {
-                    if debug { 
-                        println!("[{}] - HTTPS not available. Error: {}", target_http.host, err);
-                        println!("[{}] - Trying plain HTTP...", target_http.host)
-                    }
-                    let req_fut = client.get(format!("http://{}:{}", target_http.host, port).parse().unwrap())
-                        .and_then(|res| {
-                            res.into_body().concat2()
-                        })
-                        .map(move |content| {
-                            let mut lr = LacResponse::new(thread_id);
-                            lr.target.host = target_http.host;
-                            lr.target.port = port;
-                            lr.target.protocol = "http".to_string();
-                            lr.target.response = String::from_utf8(content.to_vec()).unwrap_or("".to_string());
-                            thread_tx_http_ok.send(lr).unwrap();
-                        })
-                        .map_err(move |err| {
-                            if debug {
-                                println!("[{}] - HTTP not available. Error: {}", target_err.host, err);
-                            }
-                        });
-                    rt::spawn(req_fut);
-                });
-
-            let target_timeout = target.clone();
-            let req_fut = Timeout::new(req_fut, Duration::from_secs(10))
-                .map_err(move |_err| {
-                    println!("[{}] - Timeout reached", target_timeout.host);
-                });
-            rt::spawn(req_fut);
+            for protocol in ["https", "http"].iter() {
+                let target_req = target.clone();
+                let target_err = target.clone();
+                let thread_tx_req = thread_tx.clone();
+                let req_fut = client.get(format!("{}://{}:{}", protocol, target_req.host, port).parse().unwrap())
+                    .and_then(|res| {
+                        res.into_body().concat2()
+                    })
+                    .map(move |content| {
+                        // TODO - Add headers
+                        let mut lr = LacResponse::new(thread_id);
+                        lr.target.host = target_req.host;
+                        lr.target.port = port;
+                        lr.target.protocol = protocol.to_string();
+                        lr.target.response = String::from_utf8(content.to_vec()).unwrap_or("".to_string());
+                        thread_tx_req.send(lr).unwrap();
+                    })
+                    .map_err(move |err| {
+                        if debug {
+                            println!("[{}] - {} not available. Error: {}", protocol.to_uppercase(), target_err.host, err);
+                        }
+                    });
+                let target_timeout = target.clone();
+                let req_timeout = Timeout::new(req_fut, Duration::from_secs(5))
+                    .map_err(move |_err| {
+                        if debug {
+                            println!("[{}] - Timeout reached ({})", target_timeout.host, protocol.to_uppercase());
+                        }
+                    });
+                rt::spawn(req_timeout);
+            }
         }
     }
 
