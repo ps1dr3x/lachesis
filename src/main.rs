@@ -97,7 +97,7 @@ fn lachesis() -> Result<(), i32> {
     // Spawn workers
     let targets_per_thread = (conf.max_targets as f32 / conf.threads as f32) as usize;
     for thread_id in 0..conf.threads {
-        if conf.debug { println!("Spawning new worker. ID: {}", thread_id); }
+        println!("Spawning new worker. ID: {}", thread_id);
         let thread_tx = tx.clone();
         let file_path = conf.file_path.clone();
         let definitions = definitions.clone();
@@ -131,7 +131,7 @@ fn lachesis() -> Result<(), i32> {
             continue;
         }
 
-        if conf.debug { println!("Message from worker: {}", lr.thread_id); }
+        println!("Message from worker: {}", lr.thread_id);
 
         let mut matching = false;
         if !lr.unreachable && !lr.target.response.is_empty() {
