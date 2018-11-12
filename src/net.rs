@@ -1,21 +1,28 @@
 extern crate unindent;
 extern crate serde_json;
+extern crate tokio;
 extern crate hyper;
 extern crate hyper_tls;
 extern crate futures;
 
 use std::{
+    io,
     sync::mpsc,
     time::{
         Instant,
         Duration
     },
     path::Path,
-    fs::File
+    fs::File,
+    net::{
+        ToSocketAddrs,
+        IpAddr
+    }
 };
 use utils::{ Definition, Options };
 use easy_reader::EasyReader;
 
+use self::tokio::timer::Timeout;
 use self::futures::{ future, lazy };
 use self::hyper::{
     Client,
@@ -84,7 +91,7 @@ pub struct LacWorker {
     thread_id: u16,
     file_path: String,
     definitions: Vec<Definition>,
-    requests: usize,
+    targets: usize,
     debug: bool
 }
 
@@ -94,7 +101,7 @@ impl LacWorker {
         thread_id: u16,
         file_path: String,
         definitions: Vec<Definition>,
-        requests: usize,
+        targets: usize,
         debug: bool
     ) -> LacWorker {
         LacWorker {
@@ -102,17 +109,15 @@ impl LacWorker {
             thread_id,
             file_path,
             definitions,
-            requests,
+            targets,
             debug
         }
     }
 
     pub fn run(&mut self) {
-        if self.debug { println!("Spawning new worker. ID: {}", self.thread_id); }
-
         let thread_tx = self.thread_tx.clone();
         let file_path = self.file_path.clone();
-        let requests = self.requests.clone();
+        let targets = self.targets.clone();
         let definitions = self.definitions.clone();
         let thread_id = self.thread_id.clone();
         let debug = self.debug.clone();
@@ -123,14 +128,28 @@ impl LacWorker {
             let dns_records_file = File::open(dns_records_file_path).unwrap();
             let mut easy_reader = EasyReader::new(dns_records_file).unwrap();
 
-            let mut req = 0;
-            while req < requests {
+            let mut target_n = 0;
+            while target_n < targets {
                 // Pick a random dns record and exclude records which are not of type A
                 let line_str = easy_reader.random_line().unwrap().unwrap();
                 let line_json: serde_json::Value = serde_json::from_str(&line_str).unwrap();
                 if line_json["type"].as_str().unwrap() != "a" { continue; }
 
                 let target = Target::new(line_json["name"].as_str().unwrap().to_string());
+
+                // Check if the dns resolves the target host
+                match lookup_host(target.host.as_str()) {
+                    Ok(ip) => {
+                        if debug { println!("New target. Host lookup: {} -> {:?}", target.host, ip); }
+                    },
+                    Err(err) => {
+                        println!("[{}] - Host lookup failed. Error: {}", target.host, err);
+                        let mut lr = LacResponse::new(thread_id);
+                        lr.unreachable = true;
+                        thread_tx.send(lr).unwrap();
+                        continue;
+                    }
+                }
 
                 // Http/s
                 let mut http_s_ports: Vec<u16> = Vec::new();
@@ -152,8 +171,9 @@ impl LacWorker {
                     );
                 }
 
-                req += 1;
-                if req == requests {
+                target_n += 1;
+
+                if target_n == targets {
                     let mut lr = LacResponse::new(thread_id);
                     lr.last = true;
                     thread_tx.send(lr).unwrap();
@@ -167,24 +187,22 @@ impl LacWorker {
     fn http_s(
             thread_id: u16,
             thread_tx: mpsc::Sender<LacResponse>,
-            mut target: Target,
+            target: Target,
             http_s_ports: Vec<u16>,
             debug: bool
         ) {
+        // TODO - Separate futures/timeouts for https and http
         for port in http_s_ports {
             let thread_tx_https_ok = thread_tx.clone();
             let thread_tx_http_ok = thread_tx.clone();
-            let thread_tx_err = thread_tx.clone();
 
-            target.port = port;
             let target_https = target.clone();
             let target_http = target.clone();
-
-            if debug { println!("New target: {}", target.host); }
+            let target_err = target.clone();
 
             let https = HttpsConnector::new(4).expect("TLS initialization failed");
             let client = Client::builder()
-                .keep_alive(false)
+                .keep_alive_timeout(Duration::from_secs(1))
                 .retry_canceled_requests(false)
                 .build::<_, hyper::Body>(https);
 
@@ -195,14 +213,16 @@ impl LacWorker {
                 .map(move |content| {
                     // TODO - Add headers
                     let mut lr = LacResponse::new(thread_id);
+                    lr.target.host = target_https.host;
+                    lr.target.port = port;
                     lr.target.protocol = "https".to_string();
                     lr.target.response = String::from_utf8(content.to_vec()).unwrap_or("".to_string());
                     thread_tx_https_ok.send(lr).unwrap();
                 })
                 .map_err(move |err| {
                     if debug { 
-                        println!("[{}] - HTTPS not available. Error: {}", target_https.host, err);
-                        println!("[{}] - Trying plain HTTP...", target_https.host)
+                        println!("[{}] - HTTPS not available. Error: {}", target_http.host, err);
+                        println!("[{}] - Trying plain HTTP...", target_http.host)
                     }
                     let req_fut = client.get(format!("http://{}:{}", target_http.host, port).parse().unwrap())
                         .and_then(|res| {
@@ -210,19 +230,24 @@ impl LacWorker {
                         })
                         .map(move |content| {
                             let mut lr = LacResponse::new(thread_id);
+                            lr.target.host = target_http.host;
+                            lr.target.port = port;
                             lr.target.protocol = "http".to_string();
                             lr.target.response = String::from_utf8(content.to_vec()).unwrap_or("".to_string());
                             thread_tx_http_ok.send(lr).unwrap();
                         })
                         .map_err(move |err| {
                             if debug {
-                                println!("[{}] - HTTP request error: {}", target_http.host, err);
+                                println!("[{}] - HTTP not available. Error: {}", target_err.host, err);
                             }
-                            let mut lr = LacResponse::new(thread_id);
-                            lr.unreachable = true;
-                            thread_tx_err.send(lr).unwrap();
                         });
                     rt::spawn(req_fut);
+                });
+
+            let target_timeout = target.clone();
+            let req_fut = Timeout::new(req_fut, Duration::from_secs(10))
+                .map_err(move |_err| {
+                    println!("[{}] - Timeout reached", target_timeout.host);
                 });
             rt::spawn(req_fut);
         }
@@ -231,7 +256,7 @@ impl LacWorker {
     fn tcp_custom(
             thread_id: u16,
             thread_tx: mpsc::Sender<LacResponse>,
-            mut target: Target,
+            target: Target,
             options: Options,
             debug: bool
         ) {
@@ -239,17 +264,13 @@ impl LacWorker {
         use std::io::{ Error, Read, Write };
 
         for port in options.ports {
-            let mut lr = LacResponse::new(thread_id);
+            let host = target.host.clone();
 
-            target.port = port;
-
-            let addr = format!("{}:{}", target.host, port).to_socket_addrs();
+            let addr = format!("{}:{}", host, port).to_socket_addrs();
             if addr.is_err() {
                 if debug {
-                    println!("[{}:{}] - TCP stream connection error: {}\n", target.host, port, addr.err().unwrap());
+                    println!("[{}:{}] - TCP stream connection error: {}\n", host, port, addr.err().unwrap());
                 }
-                lr.unreachable = true;
-                thread_tx.send(lr).unwrap();
                 continue;
             }
 
@@ -259,10 +280,8 @@ impl LacWorker {
             let stream: Result<TcpStream, Error> = TcpStream::connect_timeout(&addr, Duration::from_secs(5));
             if stream.is_err() {
                 if debug {
-                    println!("[{}:{}] - TCP stream connection error: {}\n", target.host, port, stream.err().unwrap());
+                    println!("[{}:{}] - TCP stream connection error: {}\n", host, port, stream.err().unwrap());
                 }
-                lr.unreachable = true;
-                thread_tx.send(lr).unwrap();
                 continue;
             }
             let mut stream: TcpStream = stream.unwrap();
@@ -271,10 +290,8 @@ impl LacWorker {
             let stream_write: Result<(), Error> = stream.write_all(options.message.clone().unwrap().as_bytes());
             if stream_write.is_err() {
                 if debug {
-                    println!("[{}:{}] - TCP stream write error: {}\n", target.host, port, stream_write.err().unwrap());
+                    println!("[{}:{}] - TCP stream write error: {}\n", host, port, stream_write.err().unwrap());
                 }
-                lr.unreachable = true;
-                thread_tx.send(lr).unwrap();
                 continue;
             }
 
@@ -289,19 +306,15 @@ impl LacWorker {
                         Err(e) => {
                             if res_string.len() > 0 { break; }
                             if debug {
-                                println!("[{}:{}] - TCP stream read error: {}\n", target.host, port, e);
+                                println!("[{}:{}] - TCP stream read error: {}\n", host, port, e);
                             }
-                            lr.unreachable = true;
-                            thread_tx.send(lr).unwrap();
                             break;
                         },
                         Ok(m) => {
                             if m == 0 {
                                 if debug {
-                                    println!("[{}:{}] - TCP stream read error: empty response\n", target.host, port);
+                                    println!("[{}:{}] - TCP stream read error: empty response\n", host, port);
                                 }
-                                lr.unreachable = true;
-                                thread_tx.send(lr).unwrap();
                                 break;
                             }
                             res_string += String::from_utf8(buf.to_vec()).unwrap().as_str();
@@ -311,15 +324,26 @@ impl LacWorker {
             } else {
                 if stream.read_to_string(&mut res_string).unwrap_or(0) == 0 {
                     if debug {
-                        println!("[{}:{}] - TCP stream read error: empty response\n", target.host, port);
+                        println!("[{}:{}] - TCP stream read error: empty response\n", host, port);
                     }
-                    lr.unreachable = true;
-                    thread_tx.send(lr).unwrap();
                     continue;
                 }
             }
+
+            if !res_string.is_empty() {
+                let mut lr = LacResponse::new(thread_id);
+                lr.target.host = host;
+                lr.target.port = port;
+                lr.target.protocol = "tcp/custom".to_string();
+                lr.target.response = res_string;
+                thread_tx.send(lr).unwrap();
+            }
         }
     }
+}
+
+pub fn lookup_host(host: &str) -> io::Result<Vec<IpAddr>> {
+    (host, 0).to_socket_addrs().map(|iter| iter.map(|socket_address| socket_address.ip()).collect())
 }
 
 #[allow(dead_code)]

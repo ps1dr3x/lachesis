@@ -97,6 +97,7 @@ fn lachesis() -> Result<(), i32> {
     // Spawn workers
     let targets_per_thread = (conf.max_targets as f32 / conf.threads as f32) as usize;
     for thread_id in 0..conf.threads {
+        if conf.debug { println!("Spawning new worker. ID: {}", thread_id); }
         let thread_tx = tx.clone();
         let file_path = conf.file_path.clone();
         let definitions = definitions.clone();
@@ -179,11 +180,11 @@ fn lachesis() -> Result<(), i32> {
         
         Threads: {}
         Targets: {}
-        Requests: {}
         Unreachables: {}
         Https: {}
         Http: {}
         Tcp/custom: {}
+        Total requests: {}
 
         Matching services found: {}
         ===========================
@@ -191,11 +192,11 @@ fn lachesis() -> Result<(), i32> {
     ",
         conf.threads,
         stats.targets,
-        stats.requests,
         stats.unreachables,
         stats.requests_https,
         stats.requests_http,
         stats.requests_tcp_custom,
+        stats.total_requests,
         stats.services_found).as_str())
     );
 
