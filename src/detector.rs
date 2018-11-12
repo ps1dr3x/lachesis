@@ -72,7 +72,7 @@ impl Detector {
             }
 
             if def.versions.is_none() {
-                return;
+                continue;
             }
             let versions = def.versions.clone().unwrap();
 
