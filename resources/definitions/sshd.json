@@ -1,0 +1,29 @@
+[
+    {
+        "name": "sshd",
+        "protocol": "tcp/custom",
+        "options": {
+            "ports": [22],
+            "timeout": false,
+            "message": "Could you kindly tell me if you are sshd?\r\n"
+        },
+        "service": {
+            "regex": "SSH-",
+            "log": false
+        },
+        "versions": {
+            "regex": [
+                {
+                    "regex": "OpenSSH_5.",
+                    "version": "OpenSSH 5.x",
+                    "description": "OpenSSH 5.x (outdated)"
+                },
+                {
+                    "regex": "OpenSSH_6.",
+                    "version": "OpenSSH 6.x",
+                    "description": "OpenSSH 6.x (outdated)"
+                }
+            ]
+        }
+    }
+]

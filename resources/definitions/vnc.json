@@ -1,0 +1,29 @@
+[
+    {
+        "name": "vnc",
+        "protocol": "tcp/custom",
+        "options": {
+            "ports": [5900],
+            "timeout": true,
+            "message": "RFB 003.008\n"
+        },
+        "service": {
+            "regex": "RFB ",
+            "log": true
+        },
+        "versions": {
+            "regex": [
+                {
+                    "regex": "RFB 004.001",
+                    "version": "004.001",
+                    "description": "Version 004.001"
+                },
+                {
+                    "regex": "RFB 003.008",
+                    "version": "003.008",
+                    "description": "Version 003.008"
+                }
+            ]
+        }
+    }
+]

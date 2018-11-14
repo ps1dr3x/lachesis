@@ -1,0 +1,47 @@
+[
+    {
+        "name": "webcams",
+        "protocol": "http/s",
+        "options": {
+            "ports": [
+                80,
+                81,
+                82,
+                83,
+                88,
+                443,
+                5001,
+                8010,
+                8060,
+                8080,
+                8081,
+                8083,
+                9000,
+                3000
+            ]
+        },
+        "service": {
+            "regex": "IPCamera_Logo|MJPG-Streamer|(?i)webcam server(?-i)",
+            "log": false
+        },
+        "versions": {
+            "regex": [
+                {
+                    "regex": "IPCamera_Logo",
+                    "version": "MayGion IP camera (admin:admin)",
+                    "description": "MayGion IP camera (admin:admin)"
+                },
+                {
+                    "regex": "MJPG-Streamer",
+                    "version": "MJPG-Streamer",
+                    "description": "MJPG-Streamer"
+                },
+                {
+                    "regex": "(?i)webcam server(?-i)",
+                    "version": "Android webcam",
+                    "description": "Android webcam"
+                }
+            ]
+        }
+    }
+]

@@ -1,0 +1,24 @@
+[
+    {
+        "name": "redis",
+        "protocol": "tcp/custom",
+        "options": {
+            "ports": [6379],
+            "timeout": true,
+            "message": "PING\r\n"
+        },
+        "service": {
+            "regex": "\\+PONG|\\-NOAUTH",
+            "log": true
+        },
+        "versions": {
+            "regex": [
+                {
+                    "regex": "PONG",
+                    "version": "Unprotected instance (no password)",
+                    "description": "Unprotected instance (no password)"
+                }
+            ]
+        }
+    }
+]

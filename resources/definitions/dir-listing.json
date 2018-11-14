@@ -1,0 +1,15 @@
+[
+    {
+        "name": "Directory listing",
+        "protocol": "http/s",
+        "options": {
+            "ports": [
+                80
+            ]
+        },
+        "service": {
+            "regex": "(?i)Index of(?-i)",
+            "log": true
+        }
+    }
+]
