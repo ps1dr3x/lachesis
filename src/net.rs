@@ -38,7 +38,8 @@ use self::hyper_tls::HttpsConnector;
 pub struct LacResponse {
     pub thread_id: u16,
     pub unreachable: bool,
-    pub last: bool,
+    pub last_request: bool,
+    pub last_target: bool,
     pub target: Target
 }
 
@@ -47,7 +48,8 @@ impl LacResponse {
         LacResponse {
             thread_id: 0,
             unreachable: false,
-            last: false,
+            last_request: false,
+            last_target: false,
             target: Target::default()
         }
     }
@@ -143,7 +145,7 @@ impl LacWorker {
                         if debug { println!("New target. Host lookup: {} -> {:?}", target.host, ip); }
                     },
                     Err(err) => {
-                        if debug { println!("[{}] - Host lookup failed. Error: {}", target.host, err); }
+                        if debug { println!("[{}:{}] - Host lookup failed. Error: {}", target.host, target.port, err); }
                         let mut lr = LacResponse::new(thread_id);
                         lr.unreachable = true;
                         thread_tx.send(lr).unwrap();
@@ -152,12 +154,16 @@ impl LacWorker {
                 }
 
                 // Http/s
-                let mut http_s_ports: Vec<u16> = Vec::new();
                 for def in definitions.clone() {
                     if def.protocol.as_str() != "http/s" { continue; }
-                    http_s_ports.append(&mut def.options.ports.clone());
+                    LacWorker::http_s(
+                        thread_id,
+                        thread_tx.clone(),
+                        target.clone(),
+                        def.options.clone(),
+                        debug
+                    );
                 }
-                LacWorker::http_s(thread_id, thread_tx.clone(), target.clone(), http_s_ports, debug);
 
                 // Tcp/custom
                 for def in definitions.clone() {
@@ -171,11 +177,17 @@ impl LacWorker {
                     );
                 }
 
+                // Last request of the target
+                let mut lr = LacResponse::new(thread_id);
+                lr.last_request = true;
+                thread_tx.send(lr).unwrap();
+
                 target_n += 1;
 
+                // Last target of the worker
                 if target_n == targets {
                     let mut lr = LacResponse::new(thread_id);
-                    lr.last = true;
+                    lr.last_target = true;
                     thread_tx.send(lr).unwrap();
                 }
             }
@@ -188,21 +200,25 @@ impl LacWorker {
             thread_id: u16,
             thread_tx: mpsc::Sender<LacResponse>,
             target: Target,
-            http_s_ports: Vec<u16>,
+            options: Options,
             debug: bool
         ) {
-        for port in http_s_ports {
-            let https = HttpsConnector::new(4).expect("TLS initialization failed");
-            let client = Client::builder()
-                .keep_alive_timeout(Duration::from_secs(1))
-                .retry_canceled_requests(false)
-                .build::<_, hyper::Body>(https);
+        let https = HttpsConnector::new(4).expect("TLS initialization failed");
+        let client = Client::builder()
+            .keep_alive_timeout(Duration::from_secs(1))
+            .retry_canceled_requests(false)
+            .build::<_, hyper::Body>(https);
 
-            for protocol in ["https", "http"].iter() {
-                let target_req = target.clone();
-                let target_err = target.clone();
+        for protocol in ["https", "http"].iter() {
+            for port in &options.ports {
+                let mut target_req = target.clone();
+                target_req.protocol = protocol.to_string();
+                target_req.port = port.clone();
+
+                let target_err = target_req.clone();
+                let target_timeout = target_req.clone();
                 let thread_tx_req = thread_tx.clone();
-                let req_fut = client.get(format!("{}://{}:{}", protocol, target_req.host, port).parse().unwrap())
+                let req_fut = client.get(format!("{}://{}:{}", target_req.protocol, target_req.host, target_req.port).parse().unwrap())
                     .and_then(move |res| {
                         let (parts, body) = res.into_parts();
                         body.concat2()
@@ -227,25 +243,33 @@ impl LacWorker {
                                     String::from_utf8(body_content.to_vec())
                                         .unwrap_or("".to_string())
                                 );
+                                target_req.response = raw_content;
                                 // Send the message
                                 let mut lr = LacResponse::new(thread_id);
-                                lr.target.host = target_req.host;
-                                lr.target.port = port;
-                                lr.target.protocol = protocol.to_string();
-                                lr.target.response = raw_content;
+                                lr.target = target_req;
                                 thread_tx_req.send(lr).unwrap();
                             })
                     })
                     .map_err(move |err| {
                         if debug {
-                            println!("[{}] - {} not available. Error: {}", protocol.to_uppercase(), target_err.host, err);
+                            println!(
+                                "[{}:{}] - {} not available. Error: {}",
+                                target_err.protocol.to_uppercase(),
+                                target_err.port,
+                                target_err.host,
+                                err
+                            );
                         }
                     });
-                let target_timeout = target.clone();
                 let req_timeout = Timeout::new(req_fut, Duration::from_secs(5))
                     .map_err(move |_err| {
                         if debug {
-                            println!("[{}] - Timeout reached ({})", target_timeout.host, protocol.to_uppercase());
+                            println!(
+                                "[{}:{}] - Timeout reached ({})",
+                                target_timeout.host,
+                                target_timeout.port,
+                                target_timeout.protocol.to_uppercase()
+                            );
                         }
                     });
                 rt::spawn(req_timeout);

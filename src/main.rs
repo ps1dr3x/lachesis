@@ -96,6 +96,7 @@ fn lachesis() -> Result<(), i32> {
 
     // Spawn workers
     let targets_per_thread = (conf.max_targets as f32 / conf.threads as f32) as usize;
+    let gap = conf.max_targets - (targets_per_thread * conf.threads as usize);
     for thread_id in 0..conf.threads {
         println!("Spawning new worker. ID: {}", thread_id);
         let thread_tx = tx.clone();
@@ -108,7 +109,11 @@ fn lachesis() -> Result<(), i32> {
                 thread_id,
                 file_path,
                 definitions,
-                targets_per_thread,
+                if thread_id == 0 {
+                    targets_per_thread + gap
+                } else {
+                    targets_per_thread
+                },
                 debug
             );
             worker.run();
@@ -126,7 +131,7 @@ fn lachesis() -> Result<(), i32> {
             }
         };
 
-        if lr.last {
+        if lr.last_target {
             running_threads -= 1;
             continue;
         }
@@ -137,9 +142,9 @@ fn lachesis() -> Result<(), i32> {
         if !lr.unreachable && !lr.target.response.is_empty() {
             let mut detector = Detector::new(definitions.clone());
             detector.run(
-                lr.target.host.clone(),
+                lr.target.host,
                 lr.target.port,
-                lr.target.response.clone()
+                lr.target.response
             );
 
             if !detector.response.is_empty() {
@@ -165,7 +170,7 @@ fn lachesis() -> Result<(), i32> {
             }
         }
 
-        stats.increment(lr.unreachable, lr.target.protocol.clone(), matching);
+        stats.increment(lr.last_request, lr.unreachable, lr.target.protocol, matching);
     }
 
     // Join all the threads
@@ -184,7 +189,7 @@ fn lachesis() -> Result<(), i32> {
         Https: {}
         Http: {}
         Tcp/custom: {}
-        Total requests: {}
+        Total successfull requests: {}
 
         Matching services found: {}
         ===========================

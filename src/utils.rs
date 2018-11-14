@@ -171,7 +171,12 @@ impl Stats {
         }
     }
 
-    pub fn increment(&mut self, unreachable: bool, protocol: String, matching: bool) {
+    pub fn increment(&mut self, target: bool, unreachable: bool, protocol: String, matching: bool) {
+        if target {
+            self.targets += 1;
+            return;
+        }
+
         if unreachable {
             self.unreachables += 1;
             return;
