@@ -203,17 +203,38 @@ impl LacWorker {
                 let target_err = target.clone();
                 let thread_tx_req = thread_tx.clone();
                 let req_fut = client.get(format!("{}://{}:{}", protocol, target_req.host, port).parse().unwrap())
-                    .and_then(|res| {
-                        res.into_body().concat2()
-                    })
-                    .map(move |content| {
-                        // TODO - Add headers
-                        let mut lr = LacResponse::new(thread_id);
-                        lr.target.host = target_req.host;
-                        lr.target.port = port;
-                        lr.target.protocol = protocol.to_string();
-                        lr.target.response = String::from_utf8(content.to_vec()).unwrap_or("".to_string());
-                        thread_tx_req.send(lr).unwrap();
+                    .and_then(move |res| {
+                        let (parts, body) = res.into_parts();
+                        body.concat2()
+                            .map(move |body_content| {
+                                // Merge response's headers and body
+                                let mut raw_content = format!(
+                                    "{:?} {}\r\n",
+                                    parts.version,
+                                    parts.status
+                                );
+                                for header in &parts.headers {
+                                    raw_content = format!(
+                                        "{}{}: {}\r\n",
+                                        raw_content,
+                                        header.0,
+                                        header.1.to_str().unwrap_or("")
+                                    );
+                                }
+                                raw_content = format!(
+                                    "{}\r\n{}",
+                                    raw_content,
+                                    String::from_utf8(body_content.to_vec())
+                                        .unwrap_or("".to_string())
+                                );
+                                // Send the message
+                                let mut lr = LacResponse::new(thread_id);
+                                lr.target.host = target_req.host;
+                                lr.target.port = port;
+                                lr.target.protocol = protocol.to_string();
+                                lr.target.response = raw_content;
+                                thread_tx_req.send(lr).unwrap();
+                            })
                     })
                     .map_err(move |err| {
                         if debug {
