@@ -34,7 +34,7 @@ use self::hyper::{
 };
 use self::hyper_tls::HttpsConnector;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LacResponse {
     pub thread_id: u16,
     pub unreachable: bool,
@@ -137,16 +137,17 @@ impl LacWorker {
                 let line_json: serde_json::Value = serde_json::from_str(&line_str).unwrap();
                 if line_json["type"].as_str().unwrap() != "a" { continue; }
 
-                let target = Target::new(line_json["name"].as_str().unwrap().to_string());
+                let mut lr = LacResponse::new(thread_id);
+                lr.target = Target::new(line_json["name"].as_str().unwrap().to_string());
 
                 // Check if the dns resolves the target host
-                match lookup_host(target.host.as_str()) {
+                match lookup_host(lr.target.host.as_str()) {
                     Ok(ip) => {
-                        if debug { println!("New target. Host lookup: {} -> {:?}", target.host, ip); }
+                        if debug { println!("New target. Host lookup: {} -> {:?}", lr.target.host, ip); }
                     },
                     Err(err) => {
-                        if debug { println!("[{}:{}] - Host lookup failed. Error: {}", target.host, target.port, err); }
-                        let mut lr = LacResponse::new(thread_id);
+                        if debug { println!("[{}:{}] - Host lookup failed. Error: {}", lr.target.host, lr.target.port, err); }
+                        let mut lr = lr.clone();
                         lr.unreachable = true;
                         thread_tx.send(lr).unwrap();
                         continue;
@@ -159,7 +160,7 @@ impl LacWorker {
                     LacWorker::http_s(
                         thread_id,
                         thread_tx.clone(),
-                        target.clone(),
+                        lr.target.clone(),
                         def.options.clone(),
                         debug
                     );
@@ -171,25 +172,23 @@ impl LacWorker {
                     LacWorker::tcp_custom(
                         thread_id,
                         thread_tx.clone(),
-                        target.clone(),
+                        lr.target.clone(),
                         def.options.clone(),
                         debug
                     );
                 }
 
                 // Last request of the target
-                let mut lr = LacResponse::new(thread_id);
                 lr.last_request = true;
-                thread_tx.send(lr).unwrap();
 
                 target_n += 1;
 
                 // Last target of the worker
                 if target_n == targets {
-                    let mut lr = LacResponse::new(thread_id);
                     lr.last_target = true;
-                    thread_tx.send(lr).unwrap();
                 }
+
+                thread_tx.send(lr).unwrap();
             }
 
             future::ok(())
@@ -240,8 +239,7 @@ impl LacWorker {
                                 raw_content = format!(
                                     "{}\r\n{}",
                                     raw_content,
-                                    String::from_utf8(body_content.to_vec())
-                                        .unwrap_or("".to_string())
+                                    String::from_utf8_lossy(&body_content.to_vec())
                                 );
                                 target_req.response = raw_content;
                                 // Send the message

@@ -133,13 +133,18 @@ fn lachesis() -> Result<(), i32> {
 
         if lr.last_target {
             running_threads -= 1;
-            continue;
         }
 
-        println!("Message from worker: {}", lr.thread_id);
-
         let mut matching = false;
-        if !lr.unreachable && !lr.target.response.is_empty() {
+        if !lr.unreachable && !lr.last_request && !lr.target.response.is_empty() {
+            println!(
+                "Message from worker: {} target: {}:{} length: {}",
+                lr.thread_id,
+                lr.target.host,
+                lr.target.port,
+                lr.target.response.len()
+            );
+
             let mut detector = Detector::new(definitions.clone());
             detector.run(
                 lr.target.host,
