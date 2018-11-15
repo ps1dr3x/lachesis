@@ -15,6 +15,7 @@ tokio = "=0.1.11"
 hyper = "=0.12.14"
 hyper-tls = "=0.3.0"
 futures = "=0.1.25"
+indicatif = { git = "https://github.com/mitsuhiko/indicatif" }
 
 [dependencies.rusqlite]
 version = "=0.15.0"

@@ -8,6 +8,7 @@ mod utils;
 mod detector;
 mod db;
 mod net;
+mod stats;
 
 use std::{
     thread,
@@ -17,6 +18,7 @@ use unindent::unindent;
 use net::LacResponse;
 use detector::Detector;
 use db::DbMan;
+use stats::Stats;
 
 fn usage() {
     println!("{}", unindent("
@@ -88,7 +90,7 @@ fn lachesis() -> Result<(), i32> {
     };
 
     // Some stats
-    let mut stats = utils::Stats::default();
+    let mut stats = Stats::new(conf.threads, conf.max_targets, conf.debug);
 
     // Threads vector and communication channel
     let mut threads: Vec<thread::JoinHandle<()>> = Vec::with_capacity(conf.threads as usize);
@@ -98,7 +100,7 @@ fn lachesis() -> Result<(), i32> {
     let targets_per_thread = (conf.max_targets as f32 / conf.threads as f32) as usize;
     let gap = conf.max_targets - (targets_per_thread * conf.threads as usize);
     for thread_id in 0..conf.threads {
-        println!("Spawning new worker. ID: {}", thread_id);
+        stats.log(format!("[+] Spawning new worker. ID: {}", thread_id));
         let thread_tx = tx.clone();
         let file_path = conf.file_path.clone();
         let definitions = definitions.clone();
@@ -137,13 +139,14 @@ fn lachesis() -> Result<(), i32> {
 
         let mut matching = false;
         if !lr.unreachable && !lr.last_request && !lr.target.response.is_empty() {
-            println!(
-                "Message from worker: {} target: {}:{} length: {}",
-                lr.thread_id,
+            stats.log(format!(
+                "[{}][{}:{}] Message from worker: {} length: {}",
+                lr.target.protocol,
                 lr.target.host,
                 lr.target.port,
+                lr.thread_id,
                 lr.target.response.len()
-            );
+            ));
 
             let mut detector = Detector::new(definitions.clone());
             detector.run(
@@ -154,7 +157,7 @@ fn lachesis() -> Result<(), i32> {
 
             if !detector.response.is_empty() {
                 for res in detector.response {
-                    println!("{}", unindent(format!("
+                    stats.log(unindent(format!("
 
                         ===
                         Matching service found: {}
@@ -184,31 +187,7 @@ fn lachesis() -> Result<(), i32> {
     }
 
     // Print stats
-    println!("{}", unindent(format!("
-
-        ===== SCAN  COMPLETED =====
-        
-        Threads: {}
-        Targets: {}
-        Unreachables: {}
-        Https: {}
-        Http: {}
-        Tcp/custom: {}
-        Total successfull requests: {}
-
-        Matching services found: {}
-        ===========================
-
-    ",
-        conf.threads,
-        stats.targets,
-        stats.unreachables,
-        stats.requests_https,
-        stats.requests_http,
-        stats.requests_tcp_custom,
-        stats.total_requests,
-        stats.services_found).as_str())
-    );
+    stats.finish();
 
     Ok(())
 }

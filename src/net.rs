@@ -1,4 +1,3 @@
-extern crate unindent;
 extern crate serde_json;
 extern crate tokio;
 extern crate hyper;
