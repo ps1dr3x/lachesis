@@ -149,14 +149,14 @@ fn lachesis() -> Result<(), i32> {
             ));
 
             let mut detector = Detector::new(definitions.clone());
-            detector.run(
+            let responses = detector.run(
                 lr.target.host,
                 lr.target.port,
                 lr.target.response
             );
 
-            if !detector.response.is_empty() {
-                for res in detector.response {
+            if !responses.is_empty() {
+                for res in responses {
                     stats.log(unindent(format!("
 
                         ===

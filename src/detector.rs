@@ -15,60 +15,36 @@ pub struct DetectorResponse {
 }
 
 pub struct Detector {
-    definitions: Vec<Definition>,
-    host: String,
-    port: u16,
-    res_body: String,
-    pub response: Vec<DetectorResponse>
-}
-
-impl Default for Detector {
-    fn default() -> Detector {
-        Detector {
-            definitions: Vec::new(),
-            host: "".to_string(),
-            port: 0,
-            res_body: "".to_string(),
-            response: Vec::new()
-        }
-    }
+    definitions: Vec<Definition>
 }
 
 impl Detector {
     pub fn new(definitions: Vec<Definition>) -> Detector {
         Detector {
-            definitions: definitions,
-            ..Detector::default()
+            definitions: definitions
         }
     }
 
-    pub fn run(&mut self, host: String, port: u16, res_body: String) -> &mut Detector {
-        self.host = host;
-        self.port = port;
-        self.res_body = res_body;
-        self.detect();
-        self
-    }
-
-    fn detect(&mut self) {
+    pub fn run(&mut self, host: String, port: u16, res_body: String) -> Vec<DetectorResponse> {
+        let mut matching = Vec::new();
         for def in &self.definitions {
             let mut response = DetectorResponse {
                 service: "".to_string(),
                 version: "".to_string(),
                 description: "".to_string(),
-                host: self.host.clone(),
-                port: self.port.clone()
+                host: host.clone(),
+                port: port
             };
 
             let re = Regex::new(def.service.regex.as_str()).unwrap();
-            let mat = re.find(self.res_body.as_str());
+            let mat = re.find(res_body.as_str());
 
             if mat.is_none() { continue; }
             let mat = mat.unwrap();
 
             response.service = def.name.clone();
             if def.service.log {
-                self.response.push(response.clone());
+                matching.push(response.clone());
             }
 
             if def.versions.is_none() {
@@ -78,7 +54,7 @@ impl Detector {
 
             if let Some(semver) = versions.semver {
                 let mut dots = 0;
-                let tmp_substring = self.res_body.bytes().skip(mat.end());
+                let tmp_substring = res_body.bytes().skip(mat.end());
                 for (_i, c) in tmp_substring.enumerate() {
                     if c == b'"' { break; }
                     if c == b'.' { dots += 1; }
@@ -91,7 +67,7 @@ impl Detector {
 
                 let parsed_ver = Version::parse(response.version.as_str());
                 if parsed_ver.is_err() {
-                    println!("[{}:{}] - Unknown or invalid semver: {}", self.host, self.port, response.version);
+                    println!("[{}:{}] - Unknown or invalid semver: {}", host, port, response.version);
                     continue;
                 }
 
@@ -100,7 +76,7 @@ impl Detector {
                     if version >= Version::parse(ver.from.as_str()).unwrap() &&
                         version <= Version::parse(ver.to.as_str()).unwrap() {
                         response.description = ver.description;
-                        self.response.push(response.clone());
+                        matching.push(response.clone());
                     }
                 }
             }
@@ -108,15 +84,16 @@ impl Detector {
             if let Some(regex) = versions.regex {
                 for ver in regex {
                     let re = Regex::new(ver.regex.as_str()).unwrap();
-                    let mat = re.find(self.res_body.as_str());
+                    let mat = re.find(res_body.as_str());
 
                     if mat.is_none() { continue; }
 
                     response.version = ver.version;
                     response.description = ver.description;
-                    self.response.push(response.clone());
+                    matching.push(response.clone());
                 }
             }
         }
+        matching
     }
 }
