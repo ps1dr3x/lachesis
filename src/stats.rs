@@ -72,7 +72,7 @@ impl Stats {
     }
 
     pub fn finish(&mut self) {
-        self.progress_bar.finish_with_message(&unindent(format!("
+        self.progress_bar.println(unindent(format!("
 
             ===== SCAN  COMPLETED =====
             
@@ -85,8 +85,8 @@ impl Stats {
             Total successfull requests: {}
 
             Matching services found: {}
-            ===========================
 
+            ===========================
         ",
             self.threads,
             self.targets,
@@ -97,5 +97,6 @@ impl Stats {
             self.total_requests,
             self.services_found).as_str()
         ));
+        self.progress_bar.finish();
     }
 }

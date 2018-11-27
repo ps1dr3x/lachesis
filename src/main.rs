@@ -15,7 +15,7 @@ use std::{
     sync::mpsc
 };
 use unindent::unindent;
-use net::LacResponse;
+use net::LacMessage;
 use detector::Detector;
 use db::DbMan;
 use stats::Stats;
@@ -94,7 +94,7 @@ fn lachesis() -> Result<(), i32> {
 
     // Threads vector and communication channel
     let mut threads: Vec<thread::JoinHandle<()>> = Vec::with_capacity(conf.threads as usize);
-    let (tx, rx): (mpsc::Sender<LacResponse>, mpsc::Receiver<LacResponse>) = mpsc::channel();
+    let (tx, rx): (mpsc::Sender<LacMessage>, mpsc::Receiver<LacMessage>) = mpsc::channel();
 
     // Spawn workers
     let targets_per_thread = (conf.max_targets as f32 / conf.threads as f32) as usize;
@@ -104,7 +104,6 @@ fn lachesis() -> Result<(), i32> {
         let thread_tx = tx.clone();
         let file_path = conf.file_path.clone();
         let definitions = definitions.clone();
-        let debug = conf.debug;
         let thread = thread::spawn(move || {
             let mut worker = net::LacWorker::new(
                 thread_tx,
@@ -115,8 +114,7 @@ fn lachesis() -> Result<(), i32> {
                     targets_per_thread + gap
                 } else {
                     targets_per_thread
-                },
-                debug
+                }
             );
             worker.run();
         });
@@ -133,12 +131,18 @@ fn lachesis() -> Result<(), i32> {
             }
         };
 
-        if lr.last_target {
+        if lr.is_log() {
+            stats.log_debug(lr.message);
+            continue;
+        }
+
+        if lr.is_last_message() {
+            stats.log(format!("[-] Shutting down worker: {}", lr.thread_id));
             running_threads -= 1;
         }
 
         let mut matching = false;
-        if !lr.unreachable && !lr.last_request && !lr.target.response.is_empty() {
+        if !lr.is_unreachable() && !lr.is_next_target_message() {
             stats.log(format!(
                 "[{}][{}:{}] Message from worker: {} length: {}",
                 lr.target.protocol,
@@ -150,9 +154,9 @@ fn lachesis() -> Result<(), i32> {
 
             let mut detector = Detector::new(definitions.clone());
             let responses = detector.run(
-                lr.target.host,
+                lr.target.host.clone(),
                 lr.target.port,
-                lr.target.response
+                lr.target.response.clone()
             );
 
             if !responses.is_empty() {
@@ -171,23 +175,23 @@ fn lachesis() -> Result<(), i32> {
                         res.version).as_str())
                     );
 
-                    let dbm: DbMan = DbMan::new();
+                    let dbm = DbMan::new();
                     dbm.save_service(res).unwrap();
                     matching = true;
                 }
             }
         }
 
-        stats.increment(lr.last_request, lr.unreachable, lr.target.protocol, matching);
-    }
-
-    // Join all the threads
-    for thread in threads {
-        thread.join().expect(&format!("The thread being joined has panicked\n"));
+        stats.increment(lr.is_next_target_message(), lr.is_unreachable(), lr.target.protocol, matching);
     }
 
     // Print stats
     stats.finish();
+
+    // Join all the threads
+    for thread in threads {
+        thread.join().expect(&format!("The thread being joined has panicked"));
+    }
 
     Ok(())
 }

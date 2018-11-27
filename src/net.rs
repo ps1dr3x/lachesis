@@ -34,34 +34,6 @@ use self::hyper::{
 use self::hyper_tls::HttpsConnector;
 
 #[derive(Debug, Clone)]
-pub struct LacResponse {
-    pub thread_id: u16,
-    pub unreachable: bool,
-    pub last_request: bool,
-    pub last_target: bool,
-    pub target: Target
-}
-
-impl LacResponse {
-    fn default() -> LacResponse {
-        LacResponse {
-            thread_id: 0,
-            unreachable: false,
-            last_request: false,
-            last_target: false,
-            target: Target::default()
-        }
-    }
-
-    fn new(thread_id: u16) -> LacResponse {
-        LacResponse {
-            thread_id: thread_id,
-            ..LacResponse::default()
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct Target {
     pub host: String,
     pub port: u16,
@@ -87,31 +59,82 @@ impl Target {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct LacMessage {
+    pub thread_id: u16,
+    pub message: String,
+    unreachable: bool,
+    next_target: bool,
+    pub target: Target,
+    last_message: bool
+}
+
+impl LacMessage {
+    fn default() -> LacMessage {
+        LacMessage {
+            thread_id: 0,
+            message: "".to_string(),
+            unreachable: false,
+            next_target: false,
+            target: Target::default(),
+            last_message: false
+        }
+    }
+
+    fn new(thread_id: u16) -> LacMessage {
+        LacMessage {
+            thread_id: thread_id,
+            ..LacMessage::default()
+        }
+    }
+
+    fn new_log(thread_id: u16, message: String) -> LacMessage {
+        LacMessage {
+            thread_id: thread_id,
+            message: message,
+            ..LacMessage::default()
+        }
+    }
+
+    pub fn is_log(&self) -> bool {
+        !self.message.is_empty()
+    }
+
+    pub fn is_unreachable(&self) -> bool {
+        self.unreachable
+    }
+
+    pub fn is_next_target_message(&self) -> bool {
+        self.next_target
+    }
+
+    pub fn is_last_message(&self) -> bool {
+        self.last_message
+    }
+}
+
 pub struct LacWorker {
-    thread_tx: mpsc::Sender<LacResponse>,
+    thread_tx: mpsc::Sender<LacMessage>,
     thread_id: u16,
     file_path: String,
     definitions: Vec<Definition>,
-    targets: usize,
-    debug: bool
+    targets: usize
 }
 
 impl LacWorker {
     pub fn new(
-        thread_tx: mpsc::Sender<LacResponse>,
+        thread_tx: mpsc::Sender<LacMessage>,
         thread_id: u16,
         file_path: String,
         definitions: Vec<Definition>,
-        targets: usize,
-        debug: bool
+        targets: usize
     ) -> LacWorker {
         LacWorker {
             thread_tx,
             thread_id,
             file_path,
             definitions,
-            targets,
-            debug
+            targets
         }
     }
 
@@ -121,7 +144,6 @@ impl LacWorker {
         let targets = self.targets.clone();
         let definitions = self.definitions.clone();
         let thread_id = self.thread_id.clone();
-        let debug = self.debug.clone();
 
         rt::run(lazy(move || {
             // Open dns records file and instantiate the reader
@@ -136,17 +158,24 @@ impl LacWorker {
                 let line_json: serde_json::Value = serde_json::from_str(&line_str).unwrap();
                 if line_json["type"].as_str().unwrap() != "a" { continue; }
 
-                let mut lr = LacResponse::new(thread_id);
+                let mut lr = LacMessage::new(thread_id);
                 lr.target = Target::new(line_json["name"].as_str().unwrap().to_string());
 
                 // Check if the dns resolves the target host
                 match lookup_host(lr.target.host.as_str()) {
                     Ok(ip) => {
-                        if debug { println!("New target. Host lookup: {} -> {:?}", lr.target.host, ip); }
+                        let msg = LacMessage::new_log(
+                            thread_id,
+                            format!("New target. Host lookup: {} -> {:?}", lr.target.host, ip)
+                        );
+                        thread_tx.send(msg).unwrap();
                     },
                     Err(err) => {
-                        if debug { println!("[{}:{}] - Host lookup failed. Error: {}", lr.target.host, lr.target.port, err); }
-                        let mut lr = lr.clone();
+                        let msg = LacMessage::new_log(
+                            thread_id,
+                            format!("[{}:{}] - Host lookup failed. Error: {}", lr.target.host, lr.target.port, err)
+                        );
+                        thread_tx.send(msg).unwrap();
                         lr.unreachable = true;
                         thread_tx.send(lr).unwrap();
                         continue;
@@ -160,8 +189,7 @@ impl LacWorker {
                         thread_id,
                         thread_tx.clone(),
                         lr.target.clone(),
-                        def.options.clone(),
-                        debug
+                        def.options.clone()
                     );
                 }
 
@@ -172,19 +200,17 @@ impl LacWorker {
                         thread_id,
                         thread_tx.clone(),
                         lr.target.clone(),
-                        def.options.clone(),
-                        debug
+                        def.options.clone()
                     );
                 }
 
-                // Last request of the target
-                lr.last_request = true;
-
+                // Last request for this target
+                lr.next_target = true;
                 target_n += 1;
 
-                // Last target of the worker
+                // Last message of the worker
                 if target_n == targets {
-                    lr.last_target = true;
+                    lr.last_message = true;
                 }
 
                 thread_tx.send(lr).unwrap();
@@ -196,10 +222,9 @@ impl LacWorker {
 
     fn http_s(
             thread_id: u16,
-            thread_tx: mpsc::Sender<LacResponse>,
+            thread_tx: mpsc::Sender<LacMessage>,
             target: Target,
-            options: Options,
-            debug: bool
+            options: Options
         ) {
         let https = HttpsConnector::new(4).expect("TLS initialization failed");
         let client = Client::builder()
@@ -216,6 +241,8 @@ impl LacWorker {
                 let target_err = target_req.clone();
                 let target_timeout = target_req.clone();
                 let thread_tx_req = thread_tx.clone();
+                let thread_tx_err = thread_tx.clone();
+                let thread_tx_timeout = thread_tx.clone();
                 let req_fut = client.get(format!("{}://{}:{}", target_req.protocol, target_req.host, target_req.port).parse().unwrap())
                     .and_then(move |res| {
                         let (parts, body) = res.into_parts();
@@ -242,32 +269,36 @@ impl LacWorker {
                                 );
                                 target_req.response = raw_content;
                                 // Send the message
-                                let mut lr = LacResponse::new(thread_id);
+                                let mut lr = LacMessage::new(thread_id);
                                 lr.target = target_req;
                                 thread_tx_req.send(lr).unwrap();
                             })
                     })
                     .map_err(move |err| {
-                        if debug {
-                            println!(
+                        let msg = LacMessage::new_log(
+                            thread_id,
+                            format!(
                                 "[{}:{}] - {} not available. Error: {}",
                                 target_err.protocol.to_uppercase(),
                                 target_err.port,
                                 target_err.host,
                                 err
-                            );
-                        }
+                            )
+                        );
+                        thread_tx_err.send(msg).unwrap();
                     });
                 let req_timeout = Timeout::new(req_fut, Duration::from_secs(5))
                     .map_err(move |_err| {
-                        if debug {
-                            println!(
+                        let msg = LacMessage::new_log(
+                            thread_id,
+                            format!(
                                 "[{}:{}] - Timeout reached ({})",
                                 target_timeout.host,
                                 target_timeout.port,
                                 target_timeout.protocol.to_uppercase()
-                            );
-                        }
+                            )
+                        );
+                        thread_tx_timeout.send(msg).unwrap();
                     });
                 rt::spawn(req_timeout);
             }
@@ -276,10 +307,9 @@ impl LacWorker {
 
     fn tcp_custom(
             thread_id: u16,
-            thread_tx: mpsc::Sender<LacResponse>,
+            thread_tx: mpsc::Sender<LacMessage>,
             target: Target,
-            options: Options,
-            debug: bool
+            options: Options
         ) {
         use std::net::{ TcpStream, SocketAddr, ToSocketAddrs };
         use std::io::{ Error, Read, Write };
@@ -289,9 +319,16 @@ impl LacWorker {
 
             let addr = format!("{}:{}", host, port).to_socket_addrs();
             if addr.is_err() {
-                if debug {
-                    println!("[{}:{}] - TCP stream connection error: {}\n", host, port, addr.err().unwrap());
-                }
+                let msg = LacMessage::new_log(
+                    thread_id,
+                    format!(
+                        "[{}:{}] - TCP stream connection error: {}\n",
+                        host,
+                        port,
+                        addr.err().unwrap()
+                    )
+                );
+                thread_tx.send(msg).unwrap();
                 continue;
             }
 
@@ -300,9 +337,16 @@ impl LacWorker {
 
             let stream: Result<TcpStream, Error> = TcpStream::connect_timeout(&addr, Duration::from_secs(5));
             if stream.is_err() {
-                if debug {
-                    println!("[{}:{}] - TCP stream connection error: {}\n", host, port, stream.err().unwrap());
-                }
+                let msg = LacMessage::new_log(
+                    thread_id,
+                    format!(
+                        "[{}:{}] - TCP stream connection error: {}\n",
+                        host,
+                        port,
+                        stream.err().unwrap()
+                    )
+                );
+                thread_tx.send(msg).unwrap();
                 continue;
             }
             let mut stream: TcpStream = stream.unwrap();
@@ -310,9 +354,16 @@ impl LacWorker {
             stream.set_write_timeout(Some(Duration::from_secs(5))).unwrap();
             let stream_write: Result<(), Error> = stream.write_all(options.message.clone().unwrap().as_bytes());
             if stream_write.is_err() {
-                if debug {
-                    println!("[{}:{}] - TCP stream write error: {}\n", host, port, stream_write.err().unwrap());
-                }
+                let msg = LacMessage::new_log(
+                    thread_id,
+                    format!(
+                        "[{}:{}] - TCP stream write error: {}\n",
+                        host,
+                        port,
+                        stream_write.err().unwrap()
+                    )
+                );
+                thread_tx.send(msg).unwrap();
                 continue;
             }
 
@@ -326,16 +377,20 @@ impl LacWorker {
                     match stream.read(&mut buf) {
                         Err(e) => {
                             if res_string.len() > 0 { break; }
-                            if debug {
-                                println!("[{}:{}] - TCP stream read error: {}\n", host, port, e);
-                            }
+                            let msg = LacMessage::new_log(
+                                thread_id,
+                                format!("[{}:{}] - TCP stream read error: {}\n", host, port, e)
+                            );
+                            thread_tx.send(msg).unwrap();
                             break;
                         },
                         Ok(m) => {
                             if m == 0 {
-                                if debug {
-                                    println!("[{}:{}] - TCP stream read error: empty response\n", host, port);
-                                }
+                                let msg = LacMessage::new_log(
+                                    thread_id,
+                                    format!("[{}:{}] - TCP stream read error: empty response\n", host, port)
+                                );
+                                thread_tx.send(msg).unwrap();
                                 break;
                             }
                             res_string += String::from_utf8(buf.to_vec()).unwrap().as_str();
@@ -344,15 +399,17 @@ impl LacWorker {
                 }
             } else {
                 if stream.read_to_string(&mut res_string).unwrap_or(0) == 0 {
-                    if debug {
-                        println!("[{}:{}] - TCP stream read error: empty response\n", host, port);
-                    }
+                    let msg = LacMessage::new_log(
+                        thread_id,
+                        format!("[{}:{}] - TCP stream read error: empty response\n", host, port)
+                    );
+                    thread_tx.send(msg).unwrap();
                     continue;
                 }
             }
 
             if !res_string.is_empty() {
-                let mut lr = LacResponse::new(thread_id);
+                let mut lr = LacMessage::new(thread_id);
                 lr.target.host = host;
                 lr.target.port = port;
                 lr.target.protocol = "tcp/custom".to_string();
