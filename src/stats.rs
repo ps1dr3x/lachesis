@@ -1,7 +1,7 @@
 extern crate indicatif;
 
-use self::indicatif::{ ProgressBar, ProgressStyle };
 use unindent::unindent;
+use self::indicatif::{ ProgressBar, ProgressStyle };
 
 pub struct Stats {
     debug: bool,

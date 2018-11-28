@@ -18,9 +18,8 @@ use std::{
         IpAddr
     }
 };
-use utils::{ Definition, Options };
 use easy_reader::EasyReader;
-
+use lachesis::{ Definition, Options };
 use self::tokio::timer::Timeout;
 use self::futures::{ future, lazy };
 use self::hyper::{
@@ -422,41 +421,4 @@ impl LacWorker {
 
 pub fn lookup_host(host: &str) -> io::Result<Vec<IpAddr>> {
     (host, 0).to_socket_addrs().map(|iter| iter.map(|socket_address| socket_address.ip()).collect())
-}
-
-#[allow(dead_code)]
-fn ip2hex(ip: &str) -> u32 {
-    let parts = ip.split('.').map(|p| p.parse::<u32>().unwrap());
-
-    let mut n: u32 = 0;
-
-    for (idx, p) in parts.enumerate() {
-        match idx {
-            3 => n += p,
-            2 => n += p * 256,        // 2^8
-            1 => n += p * 65536,      // 2^16
-            0 => n += p * 16777216,   // 2^24
-            _ => println!("?"),
-        }
-    }
-
-    n
-}
-
-#[allow(dead_code)]
-pub fn ip_range(ip1: &str, ip2: &str) {
-    let mut hex: u32 = ip2hex(ip1);
-    let mut hex2: u32 = ip2hex(ip2);
-
-    if hex > hex2 {
-        let tmp = hex;
-        hex = hex2;
-        hex2 = tmp;
-    }
-
-    let mut i: u32 = hex;
-    while i <= hex2 {
-        println!("{}", format!("{}.{}.{}.{}", i >> 24 & 0xff, i >> 16 & 0xff, i >> 8 & 0xff, i & 0xff));
-        i += 1
-    }
 }

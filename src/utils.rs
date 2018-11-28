@@ -1,13 +1,9 @@
 use std::fs::File;
-
-pub struct LacConf {
-    pub file_path: String,
-    pub debug: bool,
-    pub help: bool,
-    pub threads: u16,
-    pub max_targets: usize,
-    pub print_records: bool
-}
+use lachesis::{
+    LacConf,
+    Definition
+};
+use db::DbMan;
 
 pub fn get_cli_params() -> Result<LacConf, &'static str> {
     use std::env;
@@ -72,54 +68,6 @@ pub fn get_cli_params() -> Result<LacConf, &'static str> {
     Ok(conf)
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Definition {
-    pub name: String,
-    pub protocol: String,
-    pub options: Options,
-    pub service: Service,
-    pub versions: Option<Versions>
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Options {
-    pub ports: Vec<u16>,
-    pub timeout: Option<bool>,
-    pub message: Option<String>
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Service {
-    pub regex: String,
-    pub log: bool
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Versions {
-    pub semver: Option<SemverVersions>,
-    pub regex: Option<Vec<RegexVersion>>
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SemverVersions {
-    pub regex: String,
-    pub ranges: Vec<RangeVersion>
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RangeVersion {
-    pub from: String,
-    pub to: String,
-    pub description: String
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RegexVersion {
-    pub regex: String,
-    pub version: String,
-    pub description: String
-}
-
 pub fn read_validate_definitions() -> Result<Vec<Definition>, String> {
     use serde_json::{ from_reader, Error };
 
@@ -146,4 +94,54 @@ pub fn read_validate_definitions() -> Result<Vec<Definition>, String> {
     }
 
     Ok(definitions)
+}
+
+pub fn print_records() {
+    let dbm = DbMan::new();
+    let records = dbm.get_all_services().unwrap();
+    if records.is_empty() {
+        println!("Db is empty or not exists yet\n");
+        return;
+    }
+    println!("{} records:\n", records.len());
+    for rec in records {
+        println!("{:?}", rec);
+    }
+}
+
+#[allow(dead_code)]
+fn ip2hex(ip: &str) -> u32 {
+    let parts = ip.split('.').map(|p| p.parse::<u32>().unwrap());
+
+    let mut n: u32 = 0;
+
+    for (idx, p) in parts.enumerate() {
+        match idx {
+            3 => n += p,
+            2 => n += p * 256,        // 2^8
+            1 => n += p * 65536,      // 2^16
+            0 => n += p * 16777216,   // 2^24
+            _ => println!("?"),
+        }
+    }
+
+    n
+}
+
+#[allow(dead_code)]
+pub fn ip_range(ip1: &str, ip2: &str) {
+    let mut hex: u32 = ip2hex(ip1);
+    let mut hex2: u32 = ip2hex(ip2);
+
+    if hex > hex2 {
+        let tmp = hex;
+        hex = hex2;
+        hex2 = tmp;
+    }
+
+    let mut i: u32 = hex;
+    while i <= hex2 {
+        println!("{}", format!("{}.{}.{}.{}", i >> 24 & 0xff, i >> 16 & 0xff, i >> 8 & 0xff, i & 0xff));
+        i += 1
+    }
 }

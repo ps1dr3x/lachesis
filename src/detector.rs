@@ -1,9 +1,9 @@
 extern crate regex;
 extern crate semver;
 
+use lachesis::Definition;
 use self::regex::Regex;
 use self::semver::Version;
-use utils::Definition;
 
 #[derive(Clone, Debug)]
 pub struct DetectorResponse {

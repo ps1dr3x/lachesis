@@ -1,13 +1,13 @@
 extern crate rusqlite;
 
+use std::path::Path;
+use detector::DetectorResponse;
 use self::rusqlite::{
     Connection,
     Error,
     NO_PARAMS,
     types::ToSql
 };
-use std::path::Path;
-use detector::DetectorResponse;
 
 #[derive(Debug)]
 pub struct ServicesResult {
