@@ -12,8 +12,10 @@ use detector::Detector;
 use stats::Stats;
 use unindent::unindent;
 
+#[derive(Debug)]
 pub struct LacConf {
-    pub file_path: String,
+    pub definitions: Vec<String>,
+    pub dataset: String,
     pub debug: bool,
     pub help: bool,
     pub threads: u16,
@@ -71,7 +73,7 @@ pub struct RegexVersion {
 
 pub fn lachesis(conf: LacConf) -> Result<(), i32> {
     // Read & validate definitions
-    let definitions = match utils::read_validate_definitions() {
+    let definitions = match utils::read_validate_definitions(conf.definitions) {
         Ok(definitions) => definitions,
         Err(err) => {
             println!("Definitions validation failed. Error: {}", err);
@@ -92,13 +94,13 @@ pub fn lachesis(conf: LacConf) -> Result<(), i32> {
     for thread_id in 0..conf.threads {
         stats.log(format!("[+] Spawning new worker. ID: {}", thread_id));
         let thread_tx = tx.clone();
-        let file_path = conf.file_path.clone();
+        let dataset = conf.dataset.clone();
         let definitions = definitions.clone();
         let thread = thread::spawn(move || {
             let mut worker = LacWorker::new(
                 thread_tx,
                 thread_id,
-                file_path,
+                dataset,
                 definitions,
                 if thread_id == 0 {
                     targets_per_thread + gap
@@ -157,12 +159,13 @@ pub fn lachesis(conf: LacConf) -> Result<(), i32> {
                         Matching service found: {}
                         Service: {}
                         Version: {}
+                        Description: {}
                         ===
-
                     ",
                         res.host,
                         res.service,
-                        res.version).as_str())
+                        res.version,
+                        res.description).as_str())
                     );
 
                     let dbm = DbMan::new();

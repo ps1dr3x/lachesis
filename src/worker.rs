@@ -115,7 +115,7 @@ impl LacMessage {
 pub struct LacWorker {
     thread_tx: mpsc::Sender<LacMessage>,
     thread_id: u16,
-    file_path: String,
+    dataset: String,
     definitions: Vec<Definition>,
     targets: usize
 }
@@ -124,14 +124,14 @@ impl LacWorker {
     pub fn new(
         thread_tx: mpsc::Sender<LacMessage>,
         thread_id: u16,
-        file_path: String,
+        dataset: String,
         definitions: Vec<Definition>,
         targets: usize
     ) -> LacWorker {
         LacWorker {
             thread_tx,
             thread_id,
-            file_path,
+            dataset,
             definitions,
             targets
         }
@@ -139,16 +139,16 @@ impl LacWorker {
 
     pub fn run(&mut self) {
         let thread_tx = self.thread_tx.clone();
-        let file_path = self.file_path.clone();
+        let dataset = self.dataset.clone();
         let targets = self.targets.clone();
         let definitions = self.definitions.clone();
         let thread_id = self.thread_id.clone();
 
         rt::run(lazy(move || {
-            // Open dns records file and instantiate the reader
-            let dns_records_file_path = Path::new(file_path.as_str());
-            let dns_records_file = File::open(dns_records_file_path).unwrap();
-            let mut easy_reader = EasyReader::new(dns_records_file).unwrap();
+            // Open dataset and instantiate the reader
+            let dataset_path = Path::new(dataset.as_str());
+            let dataset_file = File::open(dataset_path).unwrap();
+            let mut easy_reader = EasyReader::new(dataset_file).unwrap();
 
             let mut target_n = 0;
             while target_n < targets {

@@ -1,4 +1,10 @@
-use std::fs::File;
+use std::{
+    fs::{
+        self,
+        File
+    },
+    path::Path
+};
 use lachesis::{
     LacConf,
     Definition
@@ -9,7 +15,8 @@ pub fn get_cli_params() -> Result<LacConf, &'static str> {
     use std::env;
 
     let mut conf = LacConf {
-        file_path: "".to_string(),
+        definitions: Vec::new(),
+        dataset: "".to_string(),
         debug: false,
         help: false,
         threads: 4,
@@ -20,10 +27,31 @@ pub fn get_cli_params() -> Result<LacConf, &'static str> {
     let mut args = env::args();
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--file" => {
-                conf.file_path = match args.next() {
+            "--def" => {
+                let file = match args.next() {
                     Some(arg) => arg,
-                    None => return Err("Invalid value for parameter --file")
+                    None => return Err("Invalid value for parameter --def")
+                };
+
+                if Path::new(&format!("resources/definitions/{}.json", file)).exists() {
+                    conf.definitions.push(format!("resources/definitions/{}.json", file));
+                } else if Path::new(&format!("resources/definitions/{}", file)).exists() {
+                    conf.definitions.push(format!("resources/definitions/{}", file));
+                } else if Path::new(&file).exists() {
+                    conf.definitions.push(file);
+                } else {
+                    return Err("Invalid value for parameter --def (file not found)");
+                }
+            },
+            "--dataset" => {
+                conf.dataset = match args.next() {
+                    Some(arg) => {
+                        if !Path::new(&arg).exists() {
+                            return Err("Invalid value for parameter --dataset (file not found)")
+                        }
+                        arg
+                    },
+                    None => return Err("Invalid value for parameter --dataset")
                 };
             },
             "--debug" => conf.debug = true,
@@ -57,8 +85,22 @@ pub fn get_cli_params() -> Result<LacConf, &'static str> {
         }
     }
 
-    if conf.file_path.is_empty() && !conf.help && !conf.print_records {
-        return Err("Parameter --file is mandatory");
+    if !conf.help && !conf.print_records {
+        if conf.dataset.is_empty() {
+            return Err("Parameter --dataset is mandatory");
+        }
+
+        if conf.definitions.is_empty() {
+            let paths = fs::read_dir("resources/definitions").unwrap();
+
+            for path in paths {
+                conf.definitions.push(path.unwrap().path().to_str().unwrap().to_string());
+            }
+
+            if conf.definitions.is_empty() {
+                return Err("No definition files found in resources/definitions");
+            }
+        }
     }
 
     if conf.threads as usize > conf.max_targets {
@@ -68,28 +110,38 @@ pub fn get_cli_params() -> Result<LacConf, &'static str> {
     Ok(conf)
 }
 
-pub fn read_validate_definitions() -> Result<Vec<Definition>, String> {
+pub fn read_validate_definitions(paths: Vec<String>) -> Result<Vec<Definition>, String> {
     use serde_json::{ from_reader, Error };
 
-    let def_file = match File::open("resources/definitions.json") {
-        Ok(file) => file,
-        Err(_err) => {
-            return Err("Where is resources/definitions.json? :(".to_string());
-        }
-    };
+    let mut definitions = Vec::new();
 
-    let definitions: Result<Vec<Definition>, Error> = from_reader(def_file);
-    let definitions = match definitions {
-        Ok(definitions) => definitions,
-        Err(err) => {
-            return Err(format!("JSON parser error: {}", err))
-        }
-    };
+    for path in paths {
+        let def_file = match File::open(&path) {
+            Ok(file) => file,
+            Err(_err) => {
+                return Err(format!("Definition file: {} not found.", path));
+            }
+        };
 
-    for def in definitions.clone() {
-        if def.protocol.as_str() != "tcp/custom" { continue; }
-        if def.options.message.is_none() {
-            return Err(format!("Missing mandatory option 'message' for protocol tcp/custom. Service: {}", def.name));
+        let definitions_part: Result<Vec<Definition>, Error> = from_reader(def_file);
+        let definitions_part = match definitions_part {
+            Ok(definitions_part) => definitions_part,
+            Err(err) => {
+                return Err(format!("Definition file: {} JSON parser error: {}", path, err))
+            }
+        };
+
+        definitions.extend_from_slice(&definitions_part);
+
+        for def in &definitions_part {
+            if def.protocol.as_str() != "tcp/custom" { continue; }
+            if def.options.message.is_none() {
+                return Err(format!(
+                    "Missing mandatory option 'message' for protocol tcp/custom. Definition file: {} Service: {}",
+                    path,
+                    def.name
+                ));
+            }
         }
     }
 

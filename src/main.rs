@@ -15,24 +15,7 @@ use std::process;
 use unindent::unindent;
 use lachesis::lachesis;
 
-fn usage() {
-    println!("{}", unindent("
-
-        Usage:
-
-        lachesis --file dns.json [...optional arguments]
-
-        Optional arguments:
-
-        --threads NUM (default: 4)
-        --max-targets NUM (default: 1000)
-        --debug
-        --print-records
-
-    "));
-}
-
-fn run_lachesis() -> Result<(), i32> {
+fn logo() {
     println!("{}", unindent("
 
         
@@ -43,6 +26,46 @@ fn run_lachesis() -> Result<(), i32> {
                               v0.1.0
 
     "));
+}
+
+fn usage() {
+    println!("{}", unindent("
+
+        Usage:
+
+            lachesis --dataset dataset.json [...optional arguments]
+
+        Mandatory arguments:
+
+            --dataset dataset.json
+                Notes:
+                    The full path of the DNS dataset used for the requests. The accepted format is:
+
+                    {\"name\":\"example.com\",\"type\":\"a\",\"value\":\"93.184.216.34\"}
+                    {\"name\":\"example.net\",\"type\":\"a\",\"value\":\"93.184.216.34\"}
+                    {\"name\":\"example.org\",\"type\":\"a\",\"value\":\"93.184.216.34\"}
+
+                    An example of a compatible dataset is the forward DNS dataset by Rapid7 (https://opendata.rapid7.com/sonar.fdns_v2/)
+
+        Optional arguments:
+
+            --def FILE (default: all the files in resources/definitions)
+                Notes:
+                    - Multiple files can be selected (eg. --def wordpress --def vnc)
+                    - Accepted formats are:
+                        - File name with or without extension (eg. vnc.json or vnc). The json file will be searched in directory resources/definitions/
+                        - Full/relative path to file (eg. resources/definitions/vnc.json or /casual_path/mydef.json)
+            --threads NUM (default: 4)
+            --max-targets NUM (default: 1000)
+            --debug
+            --print-records
+
+    "));
+}
+
+fn run_lachesis() -> Result<(), i32> {
+    // Print lachesis logo
+    logo();
 
     // Get & check cli parameters
     let conf = match utils::get_cli_params() {
