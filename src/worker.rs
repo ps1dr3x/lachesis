@@ -32,6 +32,14 @@ use self::hyper::{
 };
 use self::hyper_tls::HttpsConnector;
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DatasetRecord {
+    pub name: String,
+    #[serde(rename="type")]
+    pub record_type: String,
+    pub value: String
+}
+
 #[derive(Debug, Clone)]
 pub struct Target {
     pub host: String,
@@ -154,11 +162,11 @@ impl LacWorker {
             while target_n < targets {
                 // Pick a random dns record and exclude records which are not of type A
                 let line_str = easy_reader.random_line().unwrap().unwrap();
-                let line_json: serde_json::Value = serde_json::from_str(&line_str).unwrap();
-                if line_json["type"].as_str().unwrap() != "a" { continue; }
+                let dataset_record: DatasetRecord = serde_json::from_str(&line_str).unwrap();
+                if dataset_record.record_type != "a" { continue; }
 
                 let mut lr = LacMessage::new(thread_id);
-                lr.target = Target::new(line_json["name"].as_str().unwrap().to_string());
+                lr.target = Target::new(dataset_record.name);
 
                 // Check if the dns resolves the target host
                 match lookup_host(lr.target.host.as_str()) {

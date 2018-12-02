@@ -97,7 +97,7 @@ pub fn lachesis(conf: LacConf) -> Result<(), i32> {
         let dataset = conf.dataset.clone();
         let definitions = definitions.clone();
         let thread = thread::spawn(move || {
-            let mut worker = LacWorker::new(
+            LacWorker::new(
                 thread_tx,
                 thread_id,
                 dataset,
@@ -107,8 +107,7 @@ pub fn lachesis(conf: LacConf) -> Result<(), i32> {
                 } else {
                     targets_per_thread
                 }
-            );
-            worker.run();
+            ).run();
         });
         threads.push(thread);
     }
