@@ -8,7 +8,6 @@ pub struct Stats {
     threads: u16,
     progress_bar: ProgressBar,
     targets: usize,
-    unreachables: usize,
     requests_https: usize,
     requests_http: usize,
     requests_tcp_custom: usize,
@@ -28,7 +27,6 @@ impl Stats {
             threads: threads,
             progress_bar: pb,
             targets: 0,
-            unreachables: 0,
             requests_https: 0,
             requests_http: 0,
             requests_tcp_custom: 0,
@@ -37,15 +35,10 @@ impl Stats {
         }
     }
 
-    pub fn increment(&mut self, target: bool, unreachable: bool, protocol: String, matching: bool) {
+    pub fn increment(&mut self, target: bool, protocol: String, matching: bool) {
         if target {
             self.progress_bar.set_position(self.targets as u64);
             self.targets += 1;
-            return;
-        }
-
-        if unreachable {
-            self.unreachables += 1;
             return;
         }
 
@@ -78,7 +71,6 @@ impl Stats {
             
             Threads: {}
             Targets: {}
-            Unreachables: {}
             Https: {}
             Http: {}
             Tcp/custom: {}
@@ -90,7 +82,6 @@ impl Stats {
         ",
             self.threads,
             self.targets,
-            self.unreachables,
             self.requests_https,
             self.requests_http,
             self.requests_tcp_custom,

@@ -130,14 +130,21 @@ pub fn lachesis(conf: LacConf) -> Result<(), i32> {
         if lr.is_last_message() {
             stats.log(format!("[-] Shutting down worker: {}", lr.thread_id));
             running_threads -= 1;
+            continue;
         }
 
+        let host = if !lr.target.domain.is_empty() {
+            lr.target.domain.clone()
+        } else {
+            lr.target.ip.clone()
+        };
+
         let mut matching = false;
-        if !lr.is_unreachable() && !lr.is_next_target_message() {
+        if !lr.is_next_target_message() {
             stats.log(format!(
                 "[{}][{}:{}] Message from worker: {} length: {}",
                 lr.target.protocol,
-                lr.target.host,
+                host,
                 lr.target.port,
                 lr.thread_id,
                 lr.target.response.len()
@@ -145,7 +152,7 @@ pub fn lachesis(conf: LacConf) -> Result<(), i32> {
 
             let mut detector = Detector::new(definitions.clone());
             let responses = detector.run(
-                lr.target.host.clone(),
+                host,
                 lr.target.port,
                 lr.target.response.clone()
             );
@@ -174,7 +181,7 @@ pub fn lachesis(conf: LacConf) -> Result<(), i32> {
             }
         }
 
-        stats.increment(lr.is_next_target_message(), lr.is_unreachable(), lr.target.protocol, matching);
+        stats.increment(lr.is_next_target_message(), lr.target.protocol, matching);
     }
 
     // Print stats
