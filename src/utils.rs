@@ -3,13 +3,14 @@ use std::{
         self,
         File
     },
-    path::Path
+    path::Path,
+    mem
 };
-use lachesis::{
+use crate::lachesis::{
     LacConf,
     Definition
 };
-use db::DbMan;
+use crate::db::DbMan;
 
 pub fn get_cli_params() -> Result<LacConf, &'static str> {
     use std::env;
@@ -172,7 +173,7 @@ fn ip2hex(ip: &str) -> u32 {
             3 => n += p,
             2 => n += p * 256,        // 2^8
             1 => n += p * 65536,      // 2^16
-            0 => n += p * 16777216,   // 2^24
+            0 => n += p * 16_777_216,   // 2^24
             _ => println!("?"),
         }
     }
@@ -186,9 +187,7 @@ pub fn ip_range(ip1: &str, ip2: &str) {
     let mut hex2: u32 = ip2hex(ip2);
 
     if hex > hex2 {
-        let tmp = hex;
-        hex = hex2;
-        hex2 = tmp;
+        mem::swap(&mut hex, &mut hex2)
     }
 
     let mut i: u32 = hex;

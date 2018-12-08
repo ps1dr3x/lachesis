@@ -2,6 +2,7 @@
 name = "lachesis"
 version = "0.1.0"
 authors = ["Michele Federici (@ps1dr3x) <michele@federici.tech>"]
+edition = "2018"
 
 [dependencies]
 easy_reader = "=0.3.1"

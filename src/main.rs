@@ -1,9 +1,3 @@
-extern crate easy_reader;
-extern crate serde_json;
-#[macro_use]
-extern crate serde_derive;
-extern crate unindent;
-
 mod lachesis;
 mod worker;
 mod detector;
@@ -13,7 +7,7 @@ mod stats;
 
 use std::process;
 use unindent::unindent;
-use lachesis::lachesis;
+use crate::lachesis::lachesis;
 
 fn logo() {
     println!("{}", unindent("

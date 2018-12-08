@@ -1,13 +1,11 @@
-extern crate rusqlite;
-
 use std::path::Path;
-use detector::DetectorResponse;
-use self::rusqlite::{
+use rusqlite::{
     Connection,
     Error,
     NO_PARAMS,
     types::ToSql
 };
+use crate::detector::DetectorResponse;
 
 #[derive(Debug)]
 pub struct ServicesResult {
@@ -45,7 +43,7 @@ impl DbMan {
         }
     }
 
-    pub fn save_service(&self, service: DetectorResponse) -> Result<usize, Error> {
+    pub fn save_service(&self, service: &DetectorResponse) -> Result<usize, Error> {
         self.conn.execute("
             INSERT INTO services (service, version, description, host, port)
             VALUES (?1, ?2, ?3, ?4, ?5)

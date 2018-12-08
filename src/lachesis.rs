@@ -2,15 +2,19 @@ use std::{
     thread,
     sync::mpsc
 };
-use db::DbMan;
-use worker::{
+use serde_derive::{
+    Serialize,
+    Deserialize
+};
+use unindent::unindent;
+use crate::db::DbMan;
+use crate::worker::{
     LacWorker,
     LacMessage
 };
-use utils;
-use detector::Detector;
-use stats::Stats;
-use unindent::unindent;
+use crate::utils;
+use crate::detector::Detector;
+use crate::stats::Stats;
 
 #[derive(Debug)]
 pub struct LacConf {
@@ -89,7 +93,7 @@ pub fn lachesis(conf: LacConf) -> Result<(), i32> {
     let (tx, rx): (mpsc::Sender<LacMessage>, mpsc::Receiver<LacMessage>) = mpsc::channel();
 
     // Spawn workers
-    let targets_per_thread = (conf.max_targets as f32 / conf.threads as f32) as usize;
+    let targets_per_thread = (conf.max_targets as f32 / f32::from(conf.threads)) as usize;
     let gap = conf.max_targets - (targets_per_thread * conf.threads as usize);
     for thread_id in 0..conf.threads {
         stats.log(format!("[+] Spawning new worker. ID: {}", thread_id));
@@ -152,9 +156,9 @@ pub fn lachesis(conf: LacConf) -> Result<(), i32> {
 
             let mut detector = Detector::new(definitions.clone());
             let responses = detector.run(
-                host,
+                &host,
                 lr.target.port,
-                lr.target.response.clone()
+                &lr.target.response
             );
 
             if !responses.is_empty() {
@@ -175,13 +179,13 @@ pub fn lachesis(conf: LacConf) -> Result<(), i32> {
                     );
 
                     let dbm = DbMan::new();
-                    dbm.save_service(res).unwrap();
+                    dbm.save_service(&res).unwrap();
                     matching = true;
                 }
             }
         }
 
-        stats.increment(lr.is_next_target_message(), lr.target.protocol, matching);
+        stats.increment(lr.is_next_target_message(), &lr.target.protocol, matching);
     }
 
     // Print stats
@@ -189,7 +193,9 @@ pub fn lachesis(conf: LacConf) -> Result<(), i32> {
 
     // Join all the threads
     for thread in threads {
-        thread.join().expect(&format!("The thread being joined has panicked"));
+        thread.join().unwrap_or_else(|err|
+            println!("[ERROR] The thread being joined has panicked: {:?}", err)
+        );
     }
 
     Ok(())

@@ -1,9 +1,6 @@
-extern crate regex;
-extern crate semver;
-
-use lachesis::Definition;
-use self::regex::Regex;
-use self::semver::Version;
+use regex::Regex;
+use semver::Version;
+use crate::lachesis::Definition;
 
 #[derive(Clone, Debug)]
 pub struct DetectorResponse {
@@ -21,36 +18,37 @@ pub struct Detector {
 impl Detector {
     pub fn new(definitions: Vec<Definition>) -> Detector {
         Detector {
-            definitions: definitions
+            definitions
         }
     }
 
-    pub fn run(&mut self, host: String, port: u16, res_body: String) -> Vec<DetectorResponse> {
+    pub fn run(&mut self, host: &str, port: u16, res_body: &str) -> Vec<DetectorResponse> {
         let mut matching = Vec::new();
         for def in &self.definitions {
             let mut response = DetectorResponse {
                 service: "".to_string(),
                 version: "".to_string(),
                 description: "".to_string(),
-                host: host.clone(),
-                port: port
+                host: host.to_string(),
+                port
             };
 
             let re = Regex::new(def.service.regex.as_str()).unwrap();
-            let mat = re.find(res_body.as_str());
 
-            if mat.is_none() { continue; }
-            let mat = mat.unwrap();
+            let mat = match re.find(res_body) {
+                Some(mat) => mat,
+                None => continue
+            };
 
             response.service = def.name.clone();
             if def.service.log {
                 matching.push(response.clone());
             }
 
-            if def.versions.is_none() {
-                continue;
-            }
-            let versions = def.versions.clone().unwrap();
+            let versions = match def.versions.clone() {
+                Some(ver) => ver,
+                None => continue
+            };
 
             if let Some(semver) = versions.semver {
                 let mut dots = 0;
@@ -65,13 +63,14 @@ impl Detector {
                     response.version += ".0";
                 }
 
-                let parsed_ver = Version::parse(response.version.as_str());
-                if parsed_ver.is_err() {
-                    println!("[{}:{}] - Unknown or invalid semver: {}", host, port, response.version);
-                    continue;
-                }
+                let version = match Version::parse(response.version.as_str()) {
+                    Ok(ver) => ver,
+                    Err(_err) => {
+                        println!("[{}:{}] - Unknown or invalid semver: {}", host, port, response.version);
+                        continue;
+                    }
+                };
 
-                let version = parsed_ver.unwrap();
                 for ver in semver.ranges {
                     if version >= Version::parse(ver.from.as_str()).unwrap() &&
                         version <= Version::parse(ver.to.as_str()).unwrap() {
@@ -84,13 +83,12 @@ impl Detector {
             if let Some(regex) = versions.regex {
                 for ver in regex {
                     let re = Regex::new(ver.regex.as_str()).unwrap();
-                    let mat = re.find(res_body.as_str());
 
-                    if mat.is_none() { continue; }
-
-                    response.version = ver.version;
-                    response.description = ver.description;
-                    matching.push(response.clone());
+                    if let Some(_mat) = re.find(res_body) {
+                        response.version = ver.version;
+                        response.description = ver.description;
+                        matching.push(response.clone());
+                    }
                 }
             }
         }

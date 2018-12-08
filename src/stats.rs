@@ -1,7 +1,8 @@
-extern crate indicatif;
-
+use indicatif::{
+    ProgressBar,
+    ProgressStyle
+};
 use unindent::unindent;
-use self::indicatif::{ ProgressBar, ProgressStyle };
 
 pub struct Stats {
     debug: bool,
@@ -23,8 +24,8 @@ impl Stats {
             .progress_chars("#>-"));
 
         Stats {
-            debug: debug,
-            threads: threads,
+            debug,
+            threads,
             progress_bar: pb,
             targets: 0,
             requests_https: 0,
@@ -35,7 +36,7 @@ impl Stats {
         }
     }
 
-    pub fn increment(&mut self, target: bool, protocol: String, matching: bool) {
+    pub fn increment(&mut self, target: bool, protocol: &str, matching: bool) {
         if target {
             self.progress_bar.set_position(self.targets as u64);
             self.targets += 1;
@@ -44,7 +45,7 @@ impl Stats {
 
         self.total_requests += 1;
 
-        match protocol.as_str() {
+        match protocol {
             "https" => self.requests_https += 1,
             "http" => self.requests_http += 1,
             "tcp/custom" => self.requests_tcp_custom += 1,

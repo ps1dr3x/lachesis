@@ -1,9 +1,3 @@
-extern crate serde_json;
-extern crate tokio;
-extern crate hyper;
-extern crate hyper_tls;
-extern crate futures;
-
 use std::{
     sync::mpsc,
     time::Duration,
@@ -11,15 +5,20 @@ use std::{
     fs::File,
     net::SocketAddr
 };
-use easy_reader::EasyReader;
-use lachesis::{ Definition, Options };
-use self::tokio::{
+use serde_derive::{
+    Serialize,
+    Deserialize
+};
+use futures::{
+    future,
+    lazy
+};
+use tokio::{
     io,
     net::TcpStream,
     timer::Timeout
 };
-use self::futures::{ future, lazy };
-use self::hyper::{
+use hyper::{
     Client,
     rt::{
         self,
@@ -27,7 +26,12 @@ use self::hyper::{
         Stream
     }
 };
-use self::hyper_tls::HttpsConnector;
+use hyper_tls::HttpsConnector;
+use easy_reader::EasyReader;
+use crate::lachesis::{
+    Definition,
+    Options
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DatasetRecord {
@@ -59,8 +63,8 @@ impl Target {
 
     fn new(domain: String, ip: String) -> Target {
         Target {
-            domain: domain,
-            ip: ip,
+            domain,
+            ip,
             ..Target::default()
         }
     }
@@ -88,15 +92,15 @@ impl LacMessage {
 
     fn new(thread_id: u16) -> LacMessage {
         LacMessage {
-            thread_id: thread_id,
+            thread_id,
             ..LacMessage::default()
         }
     }
 
     fn new_log(thread_id: u16, message: String) -> LacMessage {
         LacMessage {
-            thread_id: thread_id,
-            message: message,
+            thread_id,
+            message,
             ..LacMessage::default()
         }
     }
@@ -146,10 +150,10 @@ impl LacWorker {
         let mut easy_reader = EasyReader::new(dataset_file).unwrap();
 
         // Clone and move the necessary objects and start the runtime
-        let targets = self.targets.clone();
+        let targets = self.targets;
         let thread_tx = self.thread_tx.clone();
         let definitions = self.definitions.clone();
-        let thread_id = self.thread_id.clone();
+        let thread_id = self.thread_id;
         rt::run(lazy(move || {
             let mut target_n = 0;
             while target_n < targets {
@@ -167,16 +171,16 @@ impl LacWorker {
                         "http/s" => {
                             LacWorker::http_s(
                                 thread_id,
-                                thread_tx.clone(),
-                                lr.target.clone(),
-                                def.options.clone()
+                                &thread_tx,
+                                &lr.target,
+                                &def.options
                             );
                         },
                         "tcp/custom" => {
                             LacWorker::tcp_custom(
                                 thread_id,
-                                thread_tx.clone(),
-                                lr.target.clone(),
+                                &thread_tx,
+                                &lr.target,
                                 def.options.clone()
                             );
                         },
@@ -207,11 +211,11 @@ impl LacWorker {
     }
 
     fn http_s(
-            thread_id: u16,
-            thread_tx: mpsc::Sender<LacMessage>,
-            target: Target,
-            options: Options
-        ) {
+        thread_id: u16,
+        thread_tx: &mpsc::Sender<LacMessage>,
+        target: &Target,
+        options: &Options
+    ) {
         let https = HttpsConnector::new(4).expect("TLS initialization failed");
         let client = Client::builder()
             .keep_alive_timeout(Duration::from_secs(1))
@@ -222,7 +226,7 @@ impl LacWorker {
             for port in &options.ports {
                 let mut target_req = target.clone();
                 target_req.protocol = protocol.to_string();
-                target_req.port = port.clone();
+                target_req.port = *port;
 
                 let target_err = target_req.clone();
                 let target_timeout = target_req.clone();
@@ -293,8 +297,8 @@ impl LacWorker {
 
     fn tcp_custom(
         thread_id: u16,
-        thread_tx: mpsc::Sender<LacMessage>,
-        target: Target,
+        thread_tx: &mpsc::Sender<LacMessage>,
+        target: &Target,
         options: Options
     ) {
         for port in options.ports {
