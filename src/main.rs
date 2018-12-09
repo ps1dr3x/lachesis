@@ -79,8 +79,13 @@ fn run_lachesis() -> Result<(), i32> {
 
     // --print-records option specified. Print records and exit
     if conf.print_records {
-        utils::print_records();
-        return Ok(());
+        match utils::print_records() {
+            Ok(()) => return Ok(()),
+            Err(err) => {
+                println!("\n[ERROR] Embedded Db error: {}\n", err);
+                return Err(1);
+            }
+        }
     }
 
     // Let's go!
@@ -89,7 +94,7 @@ fn run_lachesis() -> Result<(), i32> {
 
 fn main() {
     process::exit(match run_lachesis() {
-       Ok(_) => 0,
-       Err(exit_code) => exit_code
+        Ok(_) => 0,
+        Err(exit_code) => exit_code
     });
 }

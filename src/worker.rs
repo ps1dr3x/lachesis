@@ -36,7 +36,7 @@ use crate::lachesis::{
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DatasetRecord {
     pub name: String,
-    #[serde(rename="type")]
+    #[serde(rename = "type")]
     pub record_type: String,
     pub value: String
 }
@@ -61,7 +61,7 @@ impl Target {
         }
     }
 
-    fn new(domain: String, ip: String) -> Target {
+    fn new(domain: String, ip: String) -> Self {
         Target {
             domain,
             ip,
@@ -90,14 +90,14 @@ impl LacMessage {
         }
     }
 
-    fn new(thread_id: u16) -> LacMessage {
+    fn new(thread_id: u16) -> Self {
         LacMessage {
             thread_id,
             ..LacMessage::default()
         }
     }
 
-    fn new_log(thread_id: u16, message: String) -> LacMessage {
+    fn new_log(thread_id: u16, message: String) -> Self {
         LacMessage {
             thread_id,
             message,
@@ -133,7 +133,7 @@ impl LacWorker {
         dataset: String,
         definitions: Vec<Definition>,
         targets: usize
-    ) -> LacWorker {
+    ) -> Self {
         LacWorker {
             thread_tx,
             thread_id,
@@ -175,7 +175,7 @@ impl LacWorker {
                                 &lr.target,
                                 &def.options
                             );
-                        },
+                        }
                         "tcp/custom" => {
                             LacWorker::tcp_custom(
                                 thread_id,
@@ -183,11 +183,11 @@ impl LacWorker {
                                 &lr.target,
                                 def.options.clone()
                             );
-                        },
+                        }
                         _ => {
                             let msg = LacMessage::new_log(
                                 thread_id,
-                                format!("[ERROR] Skipping unknown protocol: {}", def.protocol)
+                                format!("\n[ERROR] Skipping unknown protocol: {}\n", def.protocol)
                             );
                             thread_tx.send(msg).unwrap();
                         }
@@ -233,36 +233,45 @@ impl LacWorker {
                 let thread_tx_req = thread_tx.clone();
                 let thread_tx_err = thread_tx.clone();
                 let thread_tx_timeout = thread_tx.clone();
-                let req_fut = client.get(format!("{}://{}:{}", target_req.protocol, target_req.domain, target_req.port).parse().unwrap())
+                let req_fut = client
+                    .get(
+                        format!(
+                            "{}://{}:{}",
+                            target_req.protocol,
+                            target_req.domain,
+                            target_req.port
+                        )
+                        .parse()
+                        .unwrap()
+                    )
                     .and_then(move |res| {
                         let (parts, body) = res.into_parts();
-                        body.concat2()
-                            .map(move |body_content| {
-                                // Merge response's headers and body
-                                let mut raw_content = format!(
-                                    "{:?} {}\r\n",
-                                    parts.version,
-                                    parts.status
-                                );
-                                for header in &parts.headers {
-                                    raw_content = format!(
-                                        "{}{}: {}\r\n",
-                                        raw_content,
-                                        header.0,
-                                        header.1.to_str().unwrap_or("")
-                                    );
-                                }
+                        body.concat2().map(move |body_content| {
+                            // Merge response's headers and body
+                            let mut raw_content = format!(
+                                "{:?} {}\r\n",
+                                parts.version,
+                                parts.status
+                            );
+                            for header in &parts.headers {
                                 raw_content = format!(
-                                    "{}\r\n{}",
+                                    "{}{}: {}\r\n",
                                     raw_content,
-                                    String::from_utf8_lossy(&body_content.to_vec())
+                                    header.0,
+                                    header.1.to_str().unwrap_or("")
                                 );
-                                target_req.response = raw_content;
-                                // Send the message
-                                let mut lr = LacMessage::new(thread_id);
-                                lr.target = target_req;
-                                thread_tx_req.send(lr).unwrap();
-                            })
+                            }
+                            raw_content = format!(
+                                "{}\r\n{}",
+                                raw_content,
+                                String::from_utf8_lossy(&body_content.to_vec())
+                            );
+                            target_req.response = raw_content;
+                            // Send the message
+                            let mut lr = LacMessage::new(thread_id);
+                            lr.target = target_req;
+                            thread_tx_req.send(lr).unwrap();
+                        })
                     })
                     .map_err(move |err| {
                         let msg = LacMessage::new_log(
@@ -309,7 +318,7 @@ impl LacWorker {
                     let msg = LacMessage::new_log(
                         thread_id,
                         format!(
-                            "[ERROR] - Invalid address: {}",
+                            "\n[ERROR] - Invalid address: {}\n",
                             format!("{}:{}", host, port)
                         )
                     );
@@ -335,41 +344,31 @@ impl LacWorker {
                         thread_id,
                         format!(
                             "[{}:{}] - TCP stream connection error: {}",
-                            host_fut_conn_err,
-                            port,
-                            err
+                            host_fut_conn_err, port, err
                         )
                     );
                     tx_fut_conn_err.send(msg).unwrap();
                     err
                 })
-                .and_then(|stream| {
-                    io::write_all(stream, message)
-                })
+                .and_then(|stream| io::write_all(stream, message))
                 .map_err(move |err| {
                     let msg = LacMessage::new_log(
                         thread_id,
                         format!(
                             "[{}:{}] - TCP stream write error: {}",
-                            host_fut_write_err,
-                            port,
-                            err
+                            host_fut_write_err, port, err
                         )
                     );
                     tx_fut_write_err.send(msg).unwrap();
                     err
                 })
-                .and_then(|(stream, _message)| {
-                    io::read_to_end(stream, Vec::new())
-                })
+                .and_then(|(stream, _message)| io::read_to_end(stream, Vec::new()))
                 .map_err(move |err| {
                     let msg = LacMessage::new_log(
                         thread_id,
                         format!(
                             "[{}:{}] - TCP stream read error: {}",
-                            host_fut_read_err,
-                            port,
-                            err
+                            host_fut_read_err, port, err
                         )
                     );
                     tx_fut_read_err.send(msg).unwrap();
@@ -405,9 +404,7 @@ impl LacWorker {
                         thread_id,
                         format!(
                             "[{}:{}] - Timeout reached ({})",
-                            timeout_host,
-                            port,
-                            "tcp/custom"
+                            timeout_host, port, "tcp/custom"
                         )
                     );
                     thread_tx_timeout.send(msg).unwrap();

@@ -80,15 +80,24 @@ pub fn lachesis(conf: LacConf) -> Result<(), i32> {
     let definitions = match utils::read_validate_definitions(conf.definitions) {
         Ok(definitions) => definitions,
         Err(err) => {
-            println!("Definitions validation failed. Error: {}", err);
+            println!("\n[ERROR] Definitions validation failed. Error: {}\n", err);
             return Err(1);
         }
     };
 
-    // Some stats
+    // Initialize the stats/logs manager
     let mut stats = Stats::new(conf.threads, conf.max_targets, conf.debug);
 
-    // Threads vector and communication channel
+    // Initialize the embedded db manager
+    let dbm = match DbMan::new() {
+        Ok(dbm) => dbm,
+        Err(err) => {
+            stats.log(format!("\n[ERROR] Db initialization error: {}\n", err));
+            return Err(1);
+        }
+    };
+
+    // Initialize the threads vector and the communication channel
     let mut threads: Vec<thread::JoinHandle<()>> = Vec::with_capacity(conf.threads as usize);
     let (tx, rx): (mpsc::Sender<LacMessage>, mpsc::Receiver<LacMessage>) = mpsc::channel();
 
@@ -121,9 +130,7 @@ pub fn lachesis(conf: LacConf) -> Result<(), i32> {
     while running_threads > 0 {
         let lr = match rx.try_recv() {
             Ok(lr) => lr,
-            Err(_err) => {
-                continue;
-            }
+            Err(_err) => continue
         };
 
         if lr.is_log() {
@@ -155,11 +162,7 @@ pub fn lachesis(conf: LacConf) -> Result<(), i32> {
             ));
 
             let mut detector = Detector::new(definitions.clone());
-            let responses = detector.run(
-                &host,
-                lr.target.port,
-                &lr.target.response
-            );
+            let responses = detector.run(&host, lr.target.port, &lr.target.response);
 
             if !responses.is_empty() {
                 for res in responses {
@@ -178,8 +181,13 @@ pub fn lachesis(conf: LacConf) -> Result<(), i32> {
                         res.description).as_str())
                     );
 
-                    let dbm = DbMan::new();
-                    dbm.save_service(&res).unwrap();
+                    match dbm.save_service(&res) {
+                        Ok(_) => (),
+                        Err(err) => {
+                            stats.log(format!("\n[ERROR] Error while saving a matching service in the embedded db: {}\n", err));
+                            return Err(1);
+                        }
+                    };
                     matching = true;
                 }
             }
@@ -188,15 +196,18 @@ pub fn lachesis(conf: LacConf) -> Result<(), i32> {
         stats.increment(lr.is_next_target_message(), &lr.target.protocol, matching);
     }
 
-    // Print stats
-    stats.finish();
-
     // Join all the threads
     for thread in threads {
-        thread.join().unwrap_or_else(|err|
-            println!("[ERROR] The thread being joined has panicked: {:?}", err)
-        );
+        thread.join().unwrap_or_else(|err| {
+            stats.log(format!(
+                "\n[ERROR] The thread being joined has panicked: {:?}\n",
+                err
+            ))
+        });
     }
+
+    // Print stats
+    stats.finish();
 
     Ok(())
 }

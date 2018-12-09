@@ -16,10 +16,8 @@ pub struct Detector {
 }
 
 impl Detector {
-    pub fn new(definitions: Vec<Definition>) -> Detector {
-        Detector {
-            definitions
-        }
+    pub fn new(definitions: Vec<Definition>) -> Self {
+        Detector { definitions }
     }
 
     pub fn run(&mut self, host: &str, port: u16, res_body: &str) -> Vec<DetectorResponse> {
@@ -66,20 +64,23 @@ impl Detector {
                 let version = match Version::parse(response.version.as_str()) {
                     Ok(ver) => ver,
                     Err(_err) => {
-                        println!("[{}:{}] - Unknown or invalid semver: {}", host, port, response.version);
+                        println!(
+                            "[{}:{}] - Unknown or invalid semver: {}",
+                            host, port, response.version
+                        );
                         continue;
                     }
                 };
 
                 for ver in semver.ranges {
-                    if version >= Version::parse(ver.from.as_str()).unwrap() &&
-                        version <= Version::parse(ver.to.as_str()).unwrap() {
+                    if version >= Version::parse(ver.from.as_str()).unwrap()
+                        && version <= Version::parse(ver.to.as_str()).unwrap() {
                         response.description = ver.description;
                         matching.push(response.clone());
                     }
                 }
             }
-            
+
             if let Some(regex) = versions.regex {
                 for ver in regex {
                     let re = Regex::new(ver.regex.as_str()).unwrap();

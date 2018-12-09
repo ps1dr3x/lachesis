@@ -17,7 +17,7 @@ pub struct Stats {
 }
 
 impl Stats {
-    pub fn new(threads: u16, max_targets: usize, debug: bool) -> Stats {
+    pub fn new(threads: u16, max_targets: usize, debug: bool) -> Self {
         let pb = ProgressBar::new(max_targets as u64);
         pb.set_style(ProgressStyle::default_bar()
             .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos:>7}/{len:7} ({eta})")
