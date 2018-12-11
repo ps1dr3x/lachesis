@@ -12,14 +12,15 @@ use crate::worker::{
     LacWorker,
     LacMessage
 };
-use crate::utils;
 use crate::detector::Detector;
 use crate::stats::Stats;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LacConf {
-    pub definitions: Vec<String>,
+    pub definitions_paths: Vec<String>,
+    pub definitions: Vec<Definition>,
     pub dataset: String,
+    pub ip_range: (String, String),
     pub debug: bool,
     pub help: bool,
     pub threads: u16,
@@ -75,21 +76,12 @@ pub struct RegexVersion {
     pub description: String
 }
 
-pub fn lachesis(conf: LacConf) -> Result<(), i32> {
-    // Read & validate definitions
-    let definitions = match utils::read_validate_definitions(conf.definitions) {
-        Ok(definitions) => definitions,
-        Err(err) => {
-            println!("\n[ERROR] Definitions validation failed. Error: {}\n", err);
-            return Err(1);
-        }
-    };
-
+pub fn lachesis(conf: &LacConf) -> Result<(), i32> {
     // Initialize the stats/logs manager
     let mut stats = Stats::new(conf.threads, conf.max_targets, conf.debug);
 
     // Initialize the embedded db manager
-    let dbm = match DbMan::new() {
+    let dbm = match DbMan::init() {
         Ok(dbm) => dbm,
         Err(err) => {
             stats.log(format!("\n[ERROR] Db initialization error: {}\n", err));
@@ -102,19 +94,17 @@ pub fn lachesis(conf: LacConf) -> Result<(), i32> {
     let (tx, rx): (mpsc::Sender<LacMessage>, mpsc::Receiver<LacMessage>) = mpsc::channel();
 
     // Spawn workers
-    let targets_per_thread = (conf.max_targets as f32 / f32::from(conf.threads)) as usize;
+    let targets_per_thread = (conf.max_targets as usize / conf.threads as usize) as usize;
     let gap = conf.max_targets - (targets_per_thread * conf.threads as usize);
     for thread_id in 0..conf.threads {
         stats.log(format!("[+] Spawning new worker. ID: {}", thread_id));
         let thread_tx = tx.clone();
-        let dataset = conf.dataset.clone();
-        let definitions = definitions.clone();
+        let conf = conf.clone();
         let thread = thread::spawn(move || {
             LacWorker::new(
                 thread_tx,
                 thread_id,
-                dataset,
-                definitions,
+                conf,
                 if thread_id == 0 {
                     targets_per_thread + gap
                 } else {
@@ -161,7 +151,7 @@ pub fn lachesis(conf: LacConf) -> Result<(), i32> {
                 lr.target.response.len()
             ));
 
-            let mut detector = Detector::new(definitions.clone());
+            let mut detector = Detector::new(conf.definitions.clone());
             let responses = detector.run(&host, lr.target.port, &lr.target.response);
 
             if !responses.is_empty() {

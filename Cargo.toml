@@ -17,6 +17,7 @@ hyper = "=0.12.14"
 hyper-tls = "=0.3.0"
 futures = "=0.1.25"
 indicatif = "=0.10.1"
+rand = "=0.6.1"
 
 [dependencies.rusqlite]
 version = "=0.15.0"

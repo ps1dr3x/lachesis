@@ -23,7 +23,7 @@ pub struct DbMan {
 }
 
 impl DbMan {
-    pub fn new() -> Result<Self, Error> {
+    pub fn init() -> Result<Self, Error> {
         let conn = Connection::open(Path::new("db/service"))?;
 
         conn.execute("

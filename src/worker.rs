@@ -29,9 +29,10 @@ use hyper::{
 use hyper_tls::HttpsConnector;
 use easy_reader::EasyReader;
 use crate::lachesis::{
-    Definition,
+    LacConf,
     Options
 };
+use crate::utils;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DatasetRecord {
@@ -121,8 +122,7 @@ impl LacMessage {
 pub struct LacWorker {
     thread_tx: mpsc::Sender<LacMessage>,
     thread_id: u16,
-    dataset: String,
-    definitions: Vec<Definition>,
+    conf: LacConf,
     targets: usize
 }
 
@@ -130,43 +130,45 @@ impl LacWorker {
     pub fn new(
         thread_tx: mpsc::Sender<LacMessage>,
         thread_id: u16,
-        dataset: String,
-        definitions: Vec<Definition>,
+        conf: LacConf,
         targets: usize
     ) -> Self {
         LacWorker {
             thread_tx,
             thread_id,
-            dataset,
-            definitions,
+            conf,
             targets
         }
     }
 
     pub fn run(&mut self) {
-        // Open dataset and instantiate the reader
-        let dataset_path = Path::new(self.dataset.as_str());
-        let dataset_file = File::open(dataset_path).unwrap();
-        let mut easy_reader = EasyReader::new(dataset_file).unwrap();
-
         // Clone and move the necessary objects and start the runtime
         let targets = self.targets;
         let thread_tx = self.thread_tx.clone();
-        let definitions = self.definitions.clone();
+        let conf = self.conf.clone();
         let thread_id = self.thread_id;
         rt::run(lazy(move || {
             let mut target_n = 0;
             while target_n < targets {
-                // Pick a random dns record and exclude records which are not of type A
-                let line_str = easy_reader.random_line().unwrap().unwrap();
-                let dataset_record: DatasetRecord = serde_json::from_str(&line_str).unwrap();
-                if dataset_record.record_type != "a" { continue; }
-
                 let mut lr = LacMessage::new(thread_id);
-                lr.target = Target::new(dataset_record.name, dataset_record.value);
+                lr.target = if !conf.dataset.is_empty() {
+                    // If dataset mode open and instantiate the reader
+                    let dataset_path = Path::new(conf.dataset.as_str());
+                    let dataset_file = File::open(dataset_path).unwrap();
+                    let mut easy_reader = EasyReader::new(dataset_file).unwrap();
+                    // Pick a random dns record and exclude records which are not of type A
+                    let line_str = easy_reader.random_line().unwrap().unwrap();
+                    let dataset_record: DatasetRecord = serde_json::from_str(&line_str).unwrap();
+                    if dataset_record.record_type != "a" { continue; }
+                    Target::new(dataset_record.name, dataset_record.value)
+                } else {
+                    // Pick a random ip in the specified range
+                    let random_ip = utils::random_ip_in_range(&conf.ip_range.0, &conf.ip_range.1).unwrap();
+                    Target::new(random_ip.clone(), random_ip)
+                };
 
                 // Requests
-                for def in &definitions {
+                for def in &conf.definitions {
                     match def.protocol.as_str() {
                         "http/s" => {
                             LacWorker::http_s(
