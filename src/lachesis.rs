@@ -28,6 +28,22 @@ pub struct LacConf {
     pub print_records: bool
 }
 
+impl LacConf {
+    pub fn default() -> LacConf {
+        LacConf {
+            definitions_paths: Vec::new(),
+            definitions: Vec::new(),
+            dataset: String::new(),
+            ip_range: (String::new(), String::new()),
+            debug: false,
+            help: false,
+            threads: 2,
+            max_targets: 5000,
+            print_records: false
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Definition {
     pub name: String,

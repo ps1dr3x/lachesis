@@ -87,7 +87,7 @@ fn run_lachesis() -> Result<(), i32> {
         match utils::print_records() {
             Ok(()) => return Ok(()),
             Err(err) => {
-                println!("\n[ERROR] Embedded Db error: {}\n", err);
+                println!("\n[ERROR] Embedded db error: {}\n", err);
                 return Err(1);
             }
         }

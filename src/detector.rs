@@ -11,6 +11,26 @@ pub struct DetectorResponse {
     pub port: u16
 }
 
+impl DetectorResponse {
+    fn default() -> DetectorResponse {
+        DetectorResponse {
+            service: String::new(),
+            version: String::new(),
+            description: String::new(),
+            host: String::new(),
+            port: 0
+        }
+    }
+
+    fn new(host: String, port: u16) -> Self {
+        DetectorResponse {
+            host,
+            port,
+            ..DetectorResponse::default()
+        }
+    }
+}
+
 pub struct Detector {
     definitions: Vec<Definition>
 }
@@ -22,14 +42,9 @@ impl Detector {
 
     pub fn run(&mut self, host: &str, port: u16, res_body: &str) -> Vec<DetectorResponse> {
         let mut matching = Vec::new();
+
         for def in &self.definitions {
-            let mut response = DetectorResponse {
-                service: "".to_string(),
-                version: "".to_string(),
-                description: "".to_string(),
-                host: host.to_string(),
-                port
-            };
+            let mut response = DetectorResponse::new(String::from(host), port);
 
             let re = Regex::new(def.service.regex.as_str()).unwrap();
 
@@ -93,6 +108,7 @@ impl Detector {
                 }
             }
         }
+
         matching
     }
 }

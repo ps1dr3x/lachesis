@@ -1,4 +1,5 @@
 use std::{
+    env,
     fs::{
         self,
         File
@@ -9,6 +10,8 @@ use std::{
 use rusqlite;
 use serde_json;
 use rand::Rng;
+use regex::Regex;
+use semver::Version;
 use crate::lachesis::{
     LacConf,
     Definition
@@ -16,19 +19,7 @@ use crate::lachesis::{
 use crate::db::DbMan;
 
 pub fn get_cli_params() -> Result<LacConf, &'static str> {
-    use std::env;
-
-    let mut conf = LacConf {
-        definitions_paths: Vec::new(),
-        definitions: Vec::new(),
-        dataset: "".to_string(),
-        ip_range: ("".to_string(), "".to_string()),
-        debug: false,
-        help: false,
-        threads: 4,
-        max_targets: 1000,
-        print_records: false
-    };
+    let mut conf = LacConf::default();
 
     let mut args = env::args();
     while let Some(arg) = args.next() {
@@ -173,6 +164,7 @@ pub fn read_validate_definitions(paths: &[String]) -> Result<Vec<Definition>, St
             }
         };
 
+        // json structure validation
         let definitions_part: Result<Vec<Definition>, serde_json::Error> = serde_json::from_reader(def_file);
         let definitions_part = match definitions_part {
             Ok(definitions_part) => definitions_part,
@@ -186,13 +178,71 @@ pub fn read_validate_definitions(paths: &[String]) -> Result<Vec<Definition>, St
 
         definitions.extend_from_slice(&definitions_part);
 
+        // regexps and semver versions validation
         for def in &definitions_part {
-            if def.protocol.as_str() != "tcp/custom" { continue; }
-            if def.options.message.is_none() {
+            match Regex::new(def.service.regex.as_str()) {
+                Ok(_re) => (),
+                Err(err) => {
+                    return Err(format!(
+                        "Invalid regex: {} Error: {}\nDefinition file: {} Service: {}",
+                        def.service.regex, err, path, def.name
+                    ));
+                }
+            }
+
+            if let Some(versions) = &def.versions {
+                if let Some(semver) = &versions.semver {
+                    match Regex::new(semver.regex.as_str()) {
+                        Ok(_re) => (),
+                        Err(err) => {
+                            return Err(format!(
+                                "Invalid regex: {} Error: {}\nDefinition file: {} Service: {}",
+                                semver.regex, err, path, def.name
+                            ));
+                        }
+                    }
+
+                    for range in &semver.ranges {
+                        match Version::parse(&range.from) {
+                            Ok(_) => {}
+                            Err(err) => {
+                                return Err(format!(
+                                    "Invalid semver: {} Error: {}\nDefinition file: {} Service: {}",
+                                    range.from, err, path, def.name
+                                ));
+                            }
+                        }
+                        match Version::parse(&range.to) {
+                            Ok(_) => {}
+                            Err(err) => {
+                                return Err(format!(
+                                    "Invalid semver: {} Error: {}\nDefinition file: {} Service: {}",
+                                    range.to, err, path, def.name
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                if let Some(regex) = &versions.regex {
+                    for r in regex {
+                        match Regex::new(r.regex.as_str()) {
+                            Ok(_re) => (),
+                            Err(err) => {
+                                return Err(format!(
+                                    "Invalid regex: {} Error: {}\nDefinition file: {} Service: {}",
+                                    r.regex, err, path, def.name
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+
+            if def.protocol.as_str() == "tcp/custom" && def.options.message.is_none() {
                 return Err(format!(
                     "Missing mandatory option 'message' for protocol tcp/custom. Definition file: {} Service: {}",
-                    path,
-                    def.name
+                    path, def.name
                 ));
             }
         }
