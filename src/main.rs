@@ -7,17 +7,20 @@ mod stats;
 
 use std::process;
 use unindent::unindent;
+use colored::Colorize;
 use crate::lachesis::lachesis;
 
 fn logo() {
     println!("{}", unindent("
 
-        
+
+        -------------8<-------------\x1b[1;36m
         .          .                 
         |  ,-. ,-. |-. ,-. ,-. . ,-. 
         |  ,-| |   | | |-' `-. | `-. 
-        `' `-^ `-' ' ' `-' `-' ' `-' 
-                              v0.1.0
+        `' `-^ `-' ' ' `-' `-' ' `-'\x1b[0;36m
+                              v0.1.0\x1b[0m
+        -------------8<-------------
 
     "));
 }
@@ -54,8 +57,8 @@ fn usage() {
                     - Accepted formats are:
                         - File name with or without extension (eg. vnc.json or vnc). The json file will be searched in directory resources/definitions/
                         - Full/relative path to file (eg. resources/definitions/vnc.json or /casual_path/mydef.json)
-            --threads <num> (default: 4)
-            --max-targets <NUM> (default: 1000)
+            --threads <num> (default: 2)
+            --max-targets <NUM> (default: ∞)
             --debug
             --print-records
 
@@ -70,7 +73,7 @@ fn run_lachesis() -> Result<(), i32> {
     let conf = match utils::get_cli_params() {
         Ok(conf) => conf,
         Err(err) => {
-            println!("\n[ERROR] {}", err);
+            println!("\n[{}] {}", "ERROR".red(), err);
             usage();
             return Err(1);
         }
@@ -87,7 +90,7 @@ fn run_lachesis() -> Result<(), i32> {
         match utils::print_records() {
             Ok(()) => return Ok(()),
             Err(err) => {
-                println!("\n[ERROR] Embedded db error: {}\n", err);
+                println!("\n[{}] Embedded db error: {}\n", "ERROR".red(), err);
                 return Err(1);
             }
         }

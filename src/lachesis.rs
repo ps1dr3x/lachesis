@@ -7,12 +7,13 @@ use serde_derive::{
     Deserialize
 };
 use unindent::unindent;
+use colored::Colorize;
 use crate::db::DbMan;
 use crate::worker::{
     LacWorker,
     LacMessage
 };
-use crate::detector::Detector;
+use crate::detector::detect;
 use crate::stats::Stats;
 
 #[derive(Clone, Debug)]
@@ -24,6 +25,7 @@ pub struct LacConf {
     pub debug: bool,
     pub help: bool,
     pub threads: u16,
+    pub with_limit: bool,
     pub max_targets: usize,
     pub print_records: bool
 }
@@ -38,6 +40,7 @@ impl LacConf {
             debug: false,
             help: false,
             threads: 2,
+            with_limit: false,
             max_targets: 5000,
             print_records: false
         }
@@ -94,7 +97,7 @@ pub struct RegexVersion {
 
 pub fn lachesis(conf: &LacConf) -> Result<(), i32> {
     // Initialize the stats/logs manager
-    let mut stats = Stats::new(conf.threads, conf.max_targets, conf.debug);
+    let mut stats = Stats::new(conf.with_limit, conf.max_targets, conf.debug);
 
     // Initialize the embedded db manager
     let dbm = match DbMan::init() {
@@ -113,7 +116,10 @@ pub fn lachesis(conf: &LacConf) -> Result<(), i32> {
     let targets_per_thread = (conf.max_targets as usize / conf.threads as usize) as usize;
     let gap = conf.max_targets - (targets_per_thread * conf.threads as usize);
     for thread_id in 0..conf.threads {
-        stats.log(format!("[+] Spawning new worker. ID: {}", thread_id));
+        stats.log(format!(
+            "[{}] Spawning new worker. ID: {}",
+            "+".blue(), thread_id.to_string().cyan()
+        ));
         let thread_tx = tx.clone();
         let conf = conf.clone();
         let thread = thread::spawn(move || {
@@ -145,7 +151,10 @@ pub fn lachesis(conf: &LacConf) -> Result<(), i32> {
         }
 
         if lr.is_last_message() {
-            stats.log(format!("[-] Shutting down worker: {}", lr.thread_id));
+            stats.log(format!(
+                "[{}] Shutting down worker: {}",
+                "-".blue(), lr.thread_id.to_string().cyan()
+            ));
             running_threads -= 1;
             continue;
         }
@@ -160,18 +169,27 @@ pub fn lachesis(conf: &LacConf) -> Result<(), i32> {
         if !lr.is_next_target_message() {
             stats.log(format!(
                 "[{}][{}:{}] Message from worker: {} length: {}",
-                lr.target.protocol,
-                host,
-                lr.target.port,
-                lr.thread_id,
-                lr.target.response.len()
+                lr.target.protocol.blue(),
+                host.cyan(),
+                lr.target.port.to_string().cyan(),
+                lr.thread_id.to_string().cyan(),
+                lr.target.response.len().to_string().cyan()
             ));
 
-            let mut detector = Detector::new(conf.definitions.clone());
-            let responses = detector.run(&host, lr.target.port, &lr.target.response);
+            let responses = detect(
+                &host,
+                lr.target.port,
+                &lr.target.response,
+                &conf.definitions
+            );
 
             if !responses.is_empty() {
                 for res in responses {
+                    if let Some(error) = res.error {
+                        stats.log(error);
+                        continue;
+                    }
+
                     stats.log(unindent(format!("
 
                         ===
@@ -180,17 +198,21 @@ pub fn lachesis(conf: &LacConf) -> Result<(), i32> {
                         Version: {}
                         Description: {}
                         ===
+
                     ",
-                        res.host,
-                        res.service,
-                        res.version,
-                        res.description).as_str())
+                        res.host.green(),
+                        res.service.green(),
+                        res.version.green(),
+                        res.description.green()).as_str())
                     );
 
                     match dbm.save_service(&res) {
                         Ok(_) => (),
                         Err(err) => {
-                            stats.log(format!("\n[ERROR] Error while saving a matching service in the embedded db: {}\n", err));
+                            stats.log(format!(
+                                "\n[{}] Error while saving a matching service in the embedded db: {}\n",
+                                "ERROR".red(), err
+                            ));
                             return Err(1);
                         }
                     };
@@ -206,14 +228,11 @@ pub fn lachesis(conf: &LacConf) -> Result<(), i32> {
     for thread in threads {
         thread.join().unwrap_or_else(|err| {
             stats.log(format!(
-                "\n[ERROR] The thread being joined has panicked: {:?}\n",
-                err
+                "\n[{}] The thread being joined has panicked: {:?}\n",
+                "ERROR".red(), err
             ))
         });
     }
 
-    // Print stats
-    stats.finish();
-
-    Ok(())
+    Ok(stats.finish())
 }

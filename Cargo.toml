@@ -16,8 +16,9 @@ tokio = "=0.1.11"
 hyper = "=0.12.14"
 hyper-tls = "=0.3.0"
 futures = "=0.1.25"
-indicatif = "=0.10.1"
+indicatif = "=0.10.3"
 rand = "=0.6.1"
+colored = "=1.6.1"
 
 [dependencies.rusqlite]
 version = "=0.15.0"

@@ -28,6 +28,7 @@ use hyper::{
 };
 use hyper_tls::HttpsConnector;
 use easy_reader::EasyReader;
+use colored::Colorize;
 use crate::lachesis::{
     LacConf,
     Options
@@ -149,7 +150,7 @@ impl LacWorker {
         let thread_id = self.thread_id;
         rt::run(lazy(move || {
             let mut target_n = 0;
-            while target_n < targets {
+            while !conf.with_limit || target_n < targets {
                 let mut lr = LacMessage::new(thread_id);
                 lr.target = if !conf.dataset.is_empty() {
                     // If dataset mode open and instantiate the reader
@@ -189,7 +190,10 @@ impl LacWorker {
                         _ => {
                             let msg = LacMessage::new_log(
                                 thread_id,
-                                format!("\n[ERROR] Skipping unknown protocol: {}\n", def.protocol)
+                                format!(
+                                    "\n[{}] Skipping unknown protocol: {}\n",
+                                    "ERROR".red(), def.protocol
+                                )
                             );
                             thread_tx.send(msg).unwrap();
                         }
@@ -218,7 +222,21 @@ impl LacWorker {
         target: &Target,
         options: &Options
     ) {
-        let https = HttpsConnector::new(4).expect("TLS initialization failed");
+        let https = match HttpsConnector::new(4) {
+            Ok(https) => https,
+            Err(err) => {
+                let msg = LacMessage::new_log(
+                    thread_id,
+                    format!(
+                        "[{}] TLS initialization failed. Error: {}",
+                        "ERROR".red(),
+                        err
+                    )
+                );
+                thread_tx.send(msg).unwrap();
+                return
+            }
+        };
         let client = Client::builder()
             .keep_alive_timeout(Duration::from_secs(1))
             .retry_canceled_requests(false)
@@ -279,10 +297,11 @@ impl LacWorker {
                         let msg = LacMessage::new_log(
                             thread_id,
                             format!(
-                                "[{}:{}] - {} not available. Error: {}",
-                                target_err.protocol.to_uppercase(),
-                                target_err.port,
-                                target_err.domain,
+                                "[{}][{}][{}:{}] - Target not available. Error: {}",
+                                "INFO".yellow(),
+                                target_err.protocol.to_uppercase().blue(),
+                                target_err.domain.cyan(),
+                                target_err.port.to_string().cyan(),
                                 err
                             )
                         );
@@ -293,10 +312,11 @@ impl LacWorker {
                         let msg = LacMessage::new_log(
                             thread_id,
                             format!(
-                                "[{}:{}] - Timeout reached ({})",
-                                target_timeout.domain,
-                                target_timeout.port,
-                                target_timeout.protocol.to_uppercase()
+                                "[{}][{}][{}:{}] - Timeout reached",
+                                "INFO".yellow(),
+                                target_timeout.protocol.to_uppercase().blue(),
+                                target_timeout.domain.cyan(),
+                                target_timeout.port.to_string().cyan()
                             )
                         );
                         thread_tx_timeout.send(msg).unwrap();
@@ -320,8 +340,9 @@ impl LacWorker {
                     let msg = LacMessage::new_log(
                         thread_id,
                         format!(
-                            "\n[ERROR] - Invalid address: {}\n",
-                            format!("{}:{}", host, port)
+                            "\n[{}] - Invalid address: {}\n",
+                            "ERROR".red(),
+                            format!("{}:{}", host, port).cyan()
                         )
                     );
                     thread_tx.send(msg).unwrap();
@@ -345,8 +366,11 @@ impl LacWorker {
                     let msg = LacMessage::new_log(
                         thread_id,
                         format!(
-                            "[{}:{}] - TCP stream connection error: {}",
-                            host_fut_conn_err, port, err
+                            "[{}][{}:{}] - TCP stream connection error: {}",
+                            "INFO".yellow(),
+                            host_fut_conn_err.cyan(),
+                            port.to_string().cyan(),
+                            err
                         )
                     );
                     tx_fut_conn_err.send(msg).unwrap();
@@ -357,8 +381,11 @@ impl LacWorker {
                     let msg = LacMessage::new_log(
                         thread_id,
                         format!(
-                            "[{}:{}] - TCP stream write error: {}",
-                            host_fut_write_err, port, err
+                            "[{}][{}:{}] - TCP stream write error: {}",
+                            "INFO".yellow(),
+                            host_fut_write_err.cyan(),
+                            port.to_string().cyan(),
+                            err
                         )
                     );
                     tx_fut_write_err.send(msg).unwrap();
@@ -369,8 +396,11 @@ impl LacWorker {
                     let msg = LacMessage::new_log(
                         thread_id,
                         format!(
-                            "[{}:{}] - TCP stream read error: {}",
-                            host_fut_read_err, port, err
+                            "[{}][{}:{}] - TCP stream read error: {}",
+                            "INFO".yellow(),
+                            host_fut_read_err.cyan(),
+                            port.to_string().cyan(),
+                            err
                         )
                     );
                     tx_fut_read_err.send(msg).unwrap();
@@ -389,9 +419,10 @@ impl LacWorker {
                     let msg = LacMessage::new_log(
                         thread_id,
                         format!(
-                            "[{}:{}] - TCP error: {}",
-                            host_fut_err,
-                            port,
+                            "[{}][{}:{}] - TCP error: {}",
+                            "INFO".yellow(),
+                            host_fut_err.cyan(),
+                            port.to_string().cyan(),
                             err
                         )
                     );
@@ -405,8 +436,11 @@ impl LacWorker {
                     let msg = LacMessage::new_log(
                         thread_id,
                         format!(
-                            "[{}:{}] - Timeout reached ({})",
-                            timeout_host, port, "tcp/custom"
+                            "[{}][{}][{}:{}] - Timeout reached",
+                            "INFO".yellow(),
+                            "tcp/custom".blue(),
+                            timeout_host.cyan(),
+                            port.to_string().cyan(),
                         )
                     );
                     thread_tx_timeout.send(msg).unwrap();

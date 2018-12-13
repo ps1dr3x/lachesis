@@ -93,6 +93,7 @@ pub fn get_cli_params() -> Result<LacConf, &'static str> {
                 };
             }
             "--max-targets" => {
+                conf.with_limit = true;
                 conf.max_targets = match args.next() {
                     Some(arg) => match arg.parse::<usize>() {
                         Ok(max_targets) => max_targets,
