@@ -207,13 +207,13 @@ impl LacWorker {
                 thread_tx.send(lr).unwrap();
             }
 
-            // Worker shutdown message
-            let mut lr = LacMessage::new(thread_id);
-            lr.last_message = true;
-            thread_tx.send(lr).unwrap();
-
             future::ok(())
         }));
+
+        // Worker shutdown message
+        let mut lr = LacMessage::new(thread_id);
+        lr.last_message = true;
+        self.thread_tx.send(lr).unwrap();
     }
 
     fn http_s(
