@@ -8,7 +8,7 @@
             "message": "PING\r\n"
         },
         "service": {
-            "regex": "\\+PONG|\\-NOAUTH",
+            "regex": "\\+PONG|\\-NOAUTH|\\-MISCONF|\\-DENIED",
             "log": true
         },
         "versions": {
@@ -17,6 +17,11 @@
                     "regex": "PONG",
                     "version": "Unprotected instance (no password)",
                     "description": "Unprotected instance (no password)"
+                },
+                {
+                    "regex": "MISCONF",
+                    "version": "Misconfigured instance",
+                    "description": "Misconfigured instance"
                 }
             ]
         }
