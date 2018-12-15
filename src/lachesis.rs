@@ -234,5 +234,6 @@ pub fn lachesis(conf: &LacConf) -> Result<(), i32> {
         });
     }
 
-    Ok(stats.finish())
+    stats.finish();
+    Ok(())
 }

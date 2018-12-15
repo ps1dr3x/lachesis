@@ -394,7 +394,7 @@ impl LacWorker {
                 })
                 .and_then(|(stream, _message)| {
                     let reader = BufReader::new(stream);
-                    io::read_until(reader, '\n' as u8, Vec::new())
+                    io::read_until(reader, b'\n', Vec::new())
                 })
                 .map_err(move |err| {
                     let msg = LacMessage::new_log(

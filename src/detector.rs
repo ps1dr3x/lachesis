@@ -38,7 +38,7 @@ pub fn detect(
         host: &str,
         port: u16,
         res_body: &str,
-        definitions: &Vec<Definition>
+        definitions: &[Definition]
     ) -> Vec<DetectorResponse> {
 
     let mut matching = Vec::new();
