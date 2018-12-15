@@ -41,14 +41,6 @@ pub fn get_cli_params() -> Result<LacConf, &'static str> {
                 } else {
                     return Err("Invalid value for parameter --def (file not found)");
                 }
-
-                conf.definitions = match read_validate_definitions(&conf.definitions_paths) {
-                    Ok(definitions) => definitions,
-                    Err(err) => {
-                        println!("{}", err);
-                        return Err("Definitions validation failed");
-                    }
-                };
             }
             "--dataset" => {
                 conf.dataset = match args.next() {
@@ -125,7 +117,7 @@ pub fn get_cli_params() -> Result<LacConf, &'static str> {
             }
         }
 
-        if conf.definitions.is_empty() {
+        if conf.definitions_paths.is_empty() {
             let paths = fs::read_dir("resources/definitions").unwrap();
 
             for path in paths {
@@ -135,16 +127,16 @@ pub fn get_cli_params() -> Result<LacConf, &'static str> {
 
             if conf.definitions_paths.is_empty() {
                 return Err("No definition files found in resources/definitions");
-            } else {
-                conf.definitions = match read_validate_definitions(&conf.definitions_paths) {
-                    Ok(definitions) => definitions,
-                    Err(err) => {
-                        println!("{}", err);
-                        return Err("Definitions validation failed");
-                    }
-                };
             }
         }
+
+        conf.definitions = match read_validate_definitions(&conf.definitions_paths) {
+            Ok(definitions) => definitions,
+            Err(err) => {
+                println!("{}", err);
+                return Err("Definitions validation failed");
+            }
+        };
     }
 
     if conf.threads as usize > conf.max_targets {
