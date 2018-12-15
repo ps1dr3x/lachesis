@@ -3,7 +3,8 @@ use std::{
     time::Duration,
     path::Path,
     fs::File,
-    net::SocketAddr
+    net::SocketAddr,
+    io::BufReader
 };
 use serde_derive::{
     Serialize,
@@ -391,7 +392,10 @@ impl LacWorker {
                     tx_fut_write_err.send(msg).unwrap();
                     err
                 })
-                .and_then(|(stream, _message)| io::read_to_end(stream, Vec::new()))
+                .and_then(|(stream, _message)| {
+                    let reader = BufReader::new(stream);
+                    io::read_until(reader, '\n' as u8, Vec::new())
+                })
                 .map_err(move |err| {
                     let msg = LacMessage::new_log(
                         thread_id,
