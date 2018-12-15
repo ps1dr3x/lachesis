@@ -4,9 +4,26 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug",
+            "name": "Debug lachesis",
             "program": "${workspaceFolder}/target/debug/lachesis",
-            "args": [],
+            "env": {
+                "RUST_BACKTRACE": "1"
+            },
+            "cargo": {
+                "args": [
+                    "build"
+                ]
+            },
+            "args": [
+                "--ip-range",
+                "192.168.0.2",
+                "192.168.0.10",
+                "--threads",
+                "2",
+                "--max-targets",
+                "4",
+                "--debug"
+            ],
             "cwd": "${workspaceFolder}"
         }
     ]
