@@ -57,7 +57,6 @@ fn usage() {
                     - Accepted formats are:
                         - File name with or without extension (eg. vnc.json or vnc). The json file will be searched in directory resources/definitions/
                         - Full/relative path to file (eg. resources/definitions/vnc.json or /casual_path/mydef.json)
-            --threads <num> (default: 2)
             --max-targets <NUM> (default: ∞)
             --debug
             --print-records

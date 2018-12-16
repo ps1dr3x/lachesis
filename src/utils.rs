@@ -67,15 +67,6 @@ pub fn get_cli_params() -> Result<LacConf, &'static str> {
             }
             "--debug" => conf.debug = true,
             "--help" => conf.help = true,
-            "--threads" => {
-                conf.threads = match args.next() {
-                    Some(arg) => match arg.parse::<u16>() {
-                        Ok(threads) => threads,
-                        Err(_err) => return Err("Invalid value for parameter --threads")
-                    },
-                    None => return Err("Invalid value for parameter --threads")
-                };
-            }
             "--max-targets" => {
                 conf.max_targets = match args.next() {
                     Some(arg) => match arg.parse::<usize>() {
@@ -125,10 +116,6 @@ pub fn get_cli_params() -> Result<LacConf, &'static str> {
                 return Err("Definitions validation failed");
             }
         };
-    }
-
-    if conf.max_targets != 0 && conf.threads as usize > conf.max_targets {
-        return Err("The number of threads can't be greater than the number of max targets");
     }
 
     Ok(conf)

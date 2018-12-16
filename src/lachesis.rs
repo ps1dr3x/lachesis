@@ -15,10 +15,10 @@ use unindent::unindent;
 use colored::Colorize;
 use crate::db::DbMan;
 use crate::worker::{
-    LacWorker,
+    self,
     LacMessage
 };
-use crate::detector::detect;
+use crate::detector;
 use crate::stats::Stats;
 
 #[derive(Clone, Debug)]
@@ -29,7 +29,6 @@ pub struct LacConf {
     pub subnets: Arc<Mutex<Vec<Ipv4AddrRange>>>,
     pub debug: bool,
     pub help: bool,
-    pub threads: u16,
     pub max_targets: usize,
     pub print_records: bool
 }
@@ -43,7 +42,6 @@ impl LacConf {
             subnets: Arc::new(Mutex::new(Vec::new())),
             debug: false,
             help: false,
-            threads: 2,
             max_targets: 0,
             print_records: false
         }
@@ -111,38 +109,17 @@ pub fn lachesis(conf: &LacConf) -> Result<(), i32> {
         }
     };
 
-    // Initialize the threads vector and the communication channel
-    let mut threads: Vec<thread::JoinHandle<()>> = Vec::with_capacity(conf.threads as usize);
+    // Initialize the communication channel
     let (tx, rx): (mpsc::Sender<LacMessage>, mpsc::Receiver<LacMessage>) = mpsc::channel();
 
-    // Spawn workers
-    let targets_per_thread = (conf.max_targets as usize / conf.threads as usize) as usize;
-    let gap = conf.max_targets - (targets_per_thread * conf.threads as usize);
-    for thread_id in 0..conf.threads {
-        stats.log(format!(
-            "[{}] Spawning new worker. ID: {}",
-            "+".blue(), thread_id.to_string().cyan()
-        ));
-        let thread_tx = tx.clone();
-        let conf = conf.clone();
-        let thread = thread::spawn(move || {
-            LacWorker::new(
-                thread_tx,
-                thread_id,
-                conf,
-                if thread_id == 0 {
-                    targets_per_thread + gap
-                } else {
-                    targets_per_thread
-                }
-            ).run();
-        });
-        threads.push(thread);
-    }
+    // Spawn worker
+    let conf_inner = conf.clone();
+    let thread = thread::spawn(move || {
+        worker::run(tx, conf_inner);
+    });
 
-    // Manage workers messages
-    let mut running_threads = conf.threads;
-    while running_threads > 0 {
+    // Manage worker's messages
+    loop {
         let lr = match rx.try_recv() {
             Ok(lr) => lr,
             Err(_err) => continue
@@ -154,12 +131,7 @@ pub fn lachesis(conf: &LacConf) -> Result<(), i32> {
         }
 
         if lr.is_last_message() {
-            stats.log(format!(
-                "[{}] Shutting down worker: {}",
-                "-".blue(), lr.thread_id.to_string().cyan()
-            ));
-            running_threads -= 1;
-            continue;
+            break;
         }
 
         let host = if !lr.target.domain.is_empty() {
@@ -171,15 +143,14 @@ pub fn lachesis(conf: &LacConf) -> Result<(), i32> {
         let mut matching = false;
         if !lr.is_next_target_message() {
             stats.log(format!(
-                "[{}][{}:{}] Message from worker: {} length: {}",
+                "[{}][{}:{}] Received message from worker. Length: {}",
                 lr.target.protocol.blue(),
                 host.cyan(),
                 lr.target.port.to_string().cyan(),
-                lr.thread_id.to_string().cyan(),
                 lr.target.response.len().to_string().cyan()
             ));
 
-            let responses = detect(
+            let responses = detector::detect(
                 &host,
                 lr.target.port,
                 &lr.target.response,
@@ -227,15 +198,13 @@ pub fn lachesis(conf: &LacConf) -> Result<(), i32> {
         stats.increment(lr.is_next_target_message(), &lr.target.protocol, matching);
     }
 
-    // Join all the threads
-    for thread in threads {
-        thread.join().unwrap_or_else(|err| {
-            stats.log(format!(
-                "\n[{}] The thread being joined has panicked: {:?}\n",
-                "ERROR".red(), err
-            ))
-        });
-    }
+    // Join the worker's thread
+    thread.join().unwrap_or_else(|err| {
+        stats.log(format!(
+            "\n[{}] The thread being joined has panicked: {:?}\n",
+            "ERROR".red(), err
+        ))
+    });
 
     stats.finish();
     Ok(())
