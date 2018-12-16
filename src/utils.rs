@@ -4,14 +4,13 @@ use std::{
         self,
         File
     },
-    path::Path,
-    mem
+    path::Path
 };
 use rusqlite;
 use serde_json;
-use rand::Rng;
 use regex::Regex;
 use semver::Version;
+use ipnet::Ipv4Net;
 use crate::lachesis::{
     LacConf,
     Definition
@@ -53,25 +52,18 @@ pub fn get_cli_params() -> Result<LacConf, &'static str> {
                     None => return Err("Invalid value for parameter --dataset")
                 };
             }
-            "--ip-range" => {
-                conf.ip_range.0 = match args.next() {
-                    Some(arg) => {
-                        if !is_valid_ipv4(&arg) {
-                            return Err("Invalid value for parameter --ip-range (first ip)")
-                        }
-                        arg
-                    }
-                    None => return Err("Invalid value for parameter --ip-range (first ip)")
+            "--subnet" => {
+                let arg = match args.next() {
+                    Some(arg) => arg,
+                    None => return Err("Missing value for parameter --subnet")
                 };
-                conf.ip_range.1 = match args.next() {
-                    Some(arg) => {
-                        if !is_valid_ipv4(&arg) {
-                            return Err("Invalid value for parameter --ip-range (second ip)")
-                        }
-                        arg
-                    }
-                    None => return Err("Invalid value for parameter --ip-range (second ip)")
-                };
+
+                match arg.parse::<Ipv4Net>() {
+                    Ok(net) => {
+                        conf.subnets.lock().unwrap().push(net.hosts());
+                    },
+                    Err(_err) => return Err("Invalid value for parameter --subnet")
+                }
             }
             "--debug" => conf.debug = true,
             "--help" => conf.help = true,
@@ -85,7 +77,6 @@ pub fn get_cli_params() -> Result<LacConf, &'static str> {
                 };
             }
             "--max-targets" => {
-                conf.with_limit = true;
                 conf.max_targets = match args.next() {
                     Some(arg) => match arg.parse::<usize>() {
                         Ok(max_targets) => max_targets,
@@ -102,19 +93,16 @@ pub fn get_cli_params() -> Result<LacConf, &'static str> {
     }
 
     if !conf.help && !conf.print_records {
-        if conf.dataset.is_empty() && conf.ip_range.0.is_empty() {
-            return Err("One of the two parameters --dataset or --ip-range must be specified");
+        if conf.dataset.is_empty() && conf.subnets.lock().unwrap().is_empty() {
+            return Err("One of the two parameters --dataset or --subnet must be specified");
         }
 
-        if !conf.dataset.is_empty() && !conf.ip_range.0.is_empty() {
-            return Err("Parameters --dataset and --ip-range are mutually exclusive");
+        if !conf.dataset.is_empty() && !conf.subnets.lock().unwrap().is_empty() {
+            return Err("Parameters --dataset and --subnet are mutually exclusive");
         }
 
-        if !conf.ip_range.0.is_empty() {
-            let ip_targets = count_ips_in_range(&conf.ip_range.0, &conf.ip_range.1).unwrap() as usize;
-            if ip_targets < conf.max_targets {
-                return Err("Parameter --max-target is less than the IPs of the specified range");
-            }
+        if conf.subnets.lock().unwrap().len() > 1 {
+            return Err("The --subnet parameter has been specified more than once. Multiple subnets are not yet supported");
         }
 
         if conf.definitions_paths.is_empty() {
@@ -139,7 +127,7 @@ pub fn get_cli_params() -> Result<LacConf, &'static str> {
         };
     }
 
-    if conf.threads as usize > conf.max_targets {
+    if conf.max_targets != 0 && conf.threads as usize > conf.max_targets {
         return Err("The number of threads can't be greater than the number of max targets");
     }
 
@@ -258,100 +246,4 @@ pub fn print_records() -> Result<(), rusqlite::Error> {
     }
 
     Ok(())
-}
-
-fn is_valid_ipv4(ip: &str) -> bool {
-    let ip1_parts = ip
-        .split('.')
-        .collect::<Vec<&str>>();
-
-    if ip1_parts.len() != 4 {
-        return false
-    }
-
-    for part in ip1_parts {
-        let n = match part.parse::<u16>() {
-            Ok(n) => n,
-            Err(_err) => return false
-        };
-        if n > 255 { return false }
-    }
-
-    true
-}
-
-fn ip_to_u32(ip: &str) -> Result<u32, String> {
-    let parts = ip
-        .split('.')
-        .collect::<Vec<&str>>();
-
-    let mut n: u32 = 0;
-
-    for (idx, p) in parts.into_iter().enumerate() {
-        let p = match p.parse::<u32>() {
-            Ok(n) => n,
-            Err(_err) => return Err(format!("Invalid ip: {}", ip))
-        };
-        match idx {
-            3 => n += p,
-            2 => n += p * 256,        // 2^8
-            1 => n += p * 65536,      // 2^16
-            0 => n += p * 16_777_216, // 2^24
-            _ => return Err(format!("Invalid ip: {}", ip))
-        }
-    }
-
-    Ok(n)
-}
-
-fn count_ips_in_range(ip1: &str, ip2: &str) -> Result<u32, String> {
-    let mut ip1 = ip_to_u32(ip1)?;
-    let mut ip2 = ip_to_u32(ip2)?;
-
-    if ip1 > ip2 {
-        mem::swap(&mut ip1, &mut ip2)
-    }
-
-    Ok(ip2 - ip1)
-}
-
-pub fn random_ip_in_range(ip1: &str, ip2: &str) -> Result<String, String> {
-    let mut random_ip = String::new();
-
-    let ip1_parts = ip1.split('.');
-    let mut ip1_parts_n: Vec<u16> = Vec::new();
-    for part in ip1_parts {
-        let n = match part.parse::<u16>() {
-            Ok(n) => n,
-            Err(_err) => return Err(format!("Invalid ip: {}", ip1))
-        };
-        ip1_parts_n.push(n);
-    }
-
-    let ip2_parts = ip2.split('.');
-    let mut ip2_parts_n: Vec<u16> = Vec::new();
-    for part in ip2_parts {
-        let n = match part.parse::<u16>() {
-            Ok(n) => n,
-            Err(_err) => return Err(format!("Invalid ip: {}", ip2))
-        };
-        ip2_parts_n.push(n);
-    }
-
-    for i in 0..4 {
-        if ip1_parts_n[i] > ip2_parts_n[i] {
-            mem::swap(&mut ip1_parts_n[i], &mut ip2_parts_n[i])
-        }
-        let n = if ip1_parts_n[i] == ip2_parts_n[i] {
-            ip1_parts_n[i]
-        } else {
-            rand::thread_rng().gen_range(ip1_parts_n[i], ip2_parts_n[i])
-        };
-        random_ip += &format!("{}", n);
-        if i < 3 {
-            random_ip += ".";
-        }
-    }
-
-    Ok(random_ip)
 }

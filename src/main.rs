@@ -31,7 +31,7 @@ fn usage() {
         Usage:
 
             lachesis --dataset <dataset.json> [...optional arguments]
-            lachesis --ip-range <192.168.1.1 192.168.2.100> [...optional arguments]
+            lachesis --subnet <192.168.0.1/24> [...optional arguments]
 
         Mandatory arguments:
 
@@ -45,9 +45,9 @@ fn usage() {
 
                     An example of a compatible dataset is the forward DNS dataset by Rapid7 (https://opendata.rapid7.com/sonar.fdns_v2/)
             
-            --ip-range <192.168.1.1 192.168.2.100>
+            --subnet <192.168.0.1/24>
                 Description:
-                    An ip range
+                    Scan a subnet
 
         Optional arguments:
 

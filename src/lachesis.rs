@@ -1,11 +1,16 @@
 use std::{
     thread,
-    sync::mpsc
+    sync::{
+        mpsc,
+        Arc,
+        Mutex
+    }
 };
 use serde_derive::{
     Serialize,
     Deserialize
 };
+use ipnet::Ipv4AddrRange;
 use unindent::unindent;
 use colored::Colorize;
 use crate::db::DbMan;
@@ -21,11 +26,10 @@ pub struct LacConf {
     pub definitions_paths: Vec<String>,
     pub definitions: Vec<Definition>,
     pub dataset: String,
-    pub ip_range: (String, String),
+    pub subnets: Arc<Mutex<Vec<Ipv4AddrRange>>>,
     pub debug: bool,
     pub help: bool,
     pub threads: u16,
-    pub with_limit: bool,
     pub max_targets: usize,
     pub print_records: bool
 }
@@ -36,12 +40,11 @@ impl LacConf {
             definitions_paths: Vec::new(),
             definitions: Vec::new(),
             dataset: String::new(),
-            ip_range: (String::new(), String::new()),
+            subnets: Arc::new(Mutex::new(Vec::new())),
             debug: false,
             help: false,
             threads: 2,
-            with_limit: false,
-            max_targets: 5000,
+            max_targets: 0,
             print_records: false
         }
     }
@@ -97,7 +100,7 @@ pub struct RegexVersion {
 
 pub fn lachesis(conf: &LacConf) -> Result<(), i32> {
     // Initialize the stats/logs manager
-    let mut stats = Stats::new(conf.with_limit, conf.max_targets, conf.debug);
+    let mut stats = Stats::new(conf.max_targets, conf.debug);
 
     // Initialize the embedded db manager
     let dbm = match DbMan::init() {

@@ -34,7 +34,6 @@ use crate::lachesis::{
     LacConf,
     Options
 };
-use crate::utils;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DatasetRecord {
@@ -151,9 +150,9 @@ impl LacWorker {
         let thread_id = self.thread_id;
         rt::run(lazy(move || {
             let mut target_n = 0;
-            while !conf.with_limit || target_n < targets {
+            while conf.max_targets == 0 || target_n < targets {
                 let mut lr = LacMessage::new(thread_id);
-                lr.target = if !conf.dataset.is_empty() {
+                let target = if !conf.dataset.is_empty() {
                     // If dataset mode open and instantiate the reader
                     let dataset_path = Path::new(conf.dataset.as_str());
                     let dataset_file = File::open(dataset_path).unwrap();
@@ -162,12 +161,23 @@ impl LacWorker {
                     let line_str = easy_reader.random_line().unwrap().unwrap();
                     let dataset_record: DatasetRecord = serde_json::from_str(&line_str).unwrap();
                     if dataset_record.record_type != "a" { continue; }
-                    Target::new(dataset_record.name, dataset_record.value)
+                    Some(Target::new(dataset_record.name, dataset_record.value))
                 } else {
-                    // Pick a random ip in the specified range
-                    let random_ip = utils::random_ip_in_range(&conf.ip_range.0, &conf.ip_range.1).unwrap();
-                    Target::new(random_ip.clone(), random_ip)
+                    // Pick the next ip in the specified subnet
+                    if let Some(ip) = conf.subnets.lock().unwrap()[0].next() {
+                        let ip_s = ip.to_string();
+                        Some(Target::new(ip_s.clone(), ip_s))
+                    } else {
+                        None
+                    }
                 };
+
+                if let Some(target) = target {
+                    lr.target = target;
+                } else {
+                    // All the targets have been consumed
+                    break;
+                }
 
                 // Requests
                 for def in &conf.definitions {

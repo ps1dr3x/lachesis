@@ -7,7 +7,7 @@ use colored::Colorize;
 pub struct Stats {
     debug: bool,
     progress_bar: ProgressBar,
-    with_limit: bool,
+    max_targets: usize,
     targets: usize,
     requests_https: usize,
     requests_http: usize,
@@ -17,8 +17,8 @@ pub struct Stats {
 }
 
 impl Stats {
-    pub fn new(with_limit: bool, max_targets: usize, debug: bool) -> Self {
-        let pb = if with_limit {
+    pub fn new(max_targets: usize, debug: bool) -> Self {
+        let pb = if max_targets != 0 {
             let pb = ProgressBar::new(max_targets as u64);
             pb.set_style(ProgressStyle::default_bar()
                 .template("\n{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos:>7}/{len:7} ({eta})\n  {wide_msg}")
@@ -35,8 +35,8 @@ impl Stats {
         Stats {
             debug,
             progress_bar: pb,
-            with_limit,
             targets: 0,
+            max_targets,
             requests_https: 0,
             requests_http: 0,
             requests_tcp_custom: 0,
@@ -47,7 +47,7 @@ impl Stats {
 
     pub fn increment(&mut self, target: bool, protocol: &str, matching: bool) {
         if target {
-            if self.with_limit {
+            if self.max_targets != 0 {
                 self.progress_bar.set_position(self.targets as u64);
             }
 
@@ -89,6 +89,12 @@ impl Stats {
     }
 
     pub fn finish(&mut self) {
+        if self.max_targets != 0 && self.targets < self.max_targets {
+            self.progress_bar.println(format!(
+                "[{}] All the targets have been consumed before reaching the specified max-targets number",
+                "INFO".yellow()
+            ));
+        }
         self.progress_bar.finish();
     }
 }
