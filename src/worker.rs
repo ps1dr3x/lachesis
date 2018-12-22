@@ -55,11 +55,11 @@ pub struct Target {
 impl Target {
     fn default() -> Target {
         Target {
-            domain: "".to_string(),
-            ip: "".to_string(),
+            domain: String::new(),
+            ip: String::new(),
             port: 0,
-            protocol: "".to_string(),
-            response: "".to_string()
+            protocol: String::new(),
+            response: String::new()
         }
     }
 
@@ -83,7 +83,7 @@ pub struct LacMessage {
 impl LacMessage {
     fn default() -> LacMessage {
         LacMessage {
-            message: "".to_string(),
+            message: String::new(),
             next_target: false,
             target: Target::default(),
             last_message: false
@@ -108,84 +108,6 @@ impl LacMessage {
     pub fn is_last_message(&self) -> bool {
         self.last_message
     }
-}
-
-pub fn run(tx: mpsc::Sender<LacMessage>, conf: LacConf) {
-    let tx_inner = tx.clone();
-    rt::run(lazy(move || {
-        let mut target_n = 0;
-        while conf.max_targets == 0 || target_n < conf.max_targets {
-            let mut lr = LacMessage::default();
-            let target = if !conf.dataset.is_empty() {
-                // If dataset mode open and instantiate the reader
-                let dataset_path = Path::new(conf.dataset.as_str());
-                let dataset_file = File::open(dataset_path).unwrap();
-                let mut easy_reader = EasyReader::new(dataset_file).unwrap();
-                // Pick a random dns record and exclude records which are not of type A
-                let line_str = easy_reader.random_line().unwrap().unwrap();
-                let dataset_record: DatasetRecord = serde_json::from_str(&line_str).unwrap();
-                if dataset_record.record_type != "a" { continue; }
-                Some(Target::new(dataset_record.name, dataset_record.value))
-            } else {
-                // If subnet mode pick the next ip in the specified subnet
-                if let Some(ip) = conf.subnets.lock().unwrap()[0].next() {
-                    let ip_s = ip.to_string();
-                    Some(Target::new(ip_s.clone(), ip_s))
-                } else {
-                    None
-                }
-            };
-
-            if let Some(target) = target {
-                lr.target = target;
-            } else {
-                // All the targets have been consumed
-                break;
-            }
-
-            // Requests
-            for def in &conf.definitions {
-                match def.protocol.as_str() {
-                    "http/s" => {
-                        http_s(
-                            &tx_inner,
-                            &lr.target,
-                            &def.options
-                        );
-                    }
-                    "tcp/custom" => {
-                        tcp_custom(
-                            &tx_inner,
-                            &lr.target,
-                            def.options.clone()
-                        );
-                    }
-                    _ => {
-                        let msg = LacMessage::log(
-                            format!(
-                                "\n[{}] Skipping unknown protocol: {}\n",
-                                "ERROR".red(), def.protocol
-                            )
-                        );
-                        tx_inner.send(msg).unwrap();
-                    }
-                }
-            }
-
-            // Last request for this target
-            lr.next_target = true;
-            target_n += 1;
-
-            tx_inner.send(lr).unwrap();
-        }
-
-        future::ok(())
-    }));
-
-    // Worker shutdown message
-    let mut lr = LacMessage::default();
-    lr.last_message = true;
-    tx.send(lr).unwrap();
 }
 
 fn http_s(
@@ -411,4 +333,98 @@ fn tcp_custom(
             });
         rt::spawn(req_timeout);
     }
+}
+
+pub fn run(tx: &mpsc::Sender<LacMessage>, conf: LacConf) {
+    let tx_inner = tx.clone();
+    rt::run(lazy(move || {
+        let mut target_n = 0;
+        while conf.max_targets == 0 || target_n < conf.max_targets {
+            let mut lr = LacMessage::default();
+            let target = if !conf.dataset.is_empty() {
+                // If dataset mode, open and instantiate the reader
+                let dataset_path = Path::new(conf.dataset.as_str());
+                let dataset_file = File::open(dataset_path).unwrap();
+                let mut easy_reader = EasyReader::new(dataset_file).unwrap();
+
+                // Pick a random dns record and exclude records which are not of type A
+                let line_str = easy_reader.random_line().unwrap().unwrap();
+                let dataset_record: DatasetRecord = serde_json::from_str(&line_str).unwrap();
+                if dataset_record.record_type != "a" { continue; }
+
+                Some(Target::new(dataset_record.name, dataset_record.value))
+            } else {
+                // If subnet mode, pick the next ip in the specified subnets
+                let mut current_subnet_idx = conf.subnets.lock().unwrap().1;
+                let mut ip = conf.subnets.lock().unwrap().0[current_subnet_idx].next();
+                while ip.is_none() {
+                    conf.subnets.lock().unwrap().1 += 1;
+                    current_subnet_idx = conf.subnets.lock().unwrap().1;
+                    if current_subnet_idx >= conf.subnets.lock().unwrap().0.len() {
+                        break;
+                    } else {
+                        ip = conf.subnets.lock().unwrap().0[current_subnet_idx].next();
+                    }
+                }
+                match ip {
+                    Some(ip) => {
+                        let ip_s = ip.to_string();
+                        Some(Target::new(ip_s.clone(), ip_s))
+                    }
+                    None => {
+                        None
+                    }
+                }
+            };
+
+            if let Some(target) = target {
+                lr.target = target;
+            } else {
+                // All the targets have been consumed
+                break;
+            }
+
+            // Requests
+            for def in &conf.definitions {
+                match def.protocol.as_str() {
+                    "http/s" => {
+                        http_s(
+                            &tx_inner,
+                            &lr.target,
+                            &def.options
+                        );
+                    }
+                    "tcp/custom" => {
+                        tcp_custom(
+                            &tx_inner,
+                            &lr.target,
+                            def.options.clone()
+                        );
+                    }
+                    _ => {
+                        let msg = LacMessage::log(
+                            format!(
+                                "\n[{}] Skipping unknown protocol: {}\n",
+                                "ERROR".red(), def.protocol
+                            )
+                        );
+                        tx_inner.send(msg).unwrap();
+                    }
+                }
+            }
+
+            // Last request for this target
+            lr.next_target = true;
+            target_n += 1;
+
+            tx_inner.send(lr).unwrap();
+        }
+
+        future::ok(())
+    }));
+
+    // Worker shutdown message
+    let mut lr = LacMessage::default();
+    lr.last_message = true;
+    tx.send(lr).unwrap();
 }

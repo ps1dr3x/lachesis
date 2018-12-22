@@ -60,7 +60,7 @@ pub fn get_cli_params() -> Result<LacConf, &'static str> {
 
                 match arg.parse::<Ipv4Net>() {
                     Ok(net) => {
-                        conf.subnets.lock().unwrap().push(net.hosts());
+                        conf.subnets.lock().unwrap().0.push(net.hosts());
                     },
                     Err(_err) => return Err("Invalid value for parameter --subnet")
                 }
@@ -84,16 +84,12 @@ pub fn get_cli_params() -> Result<LacConf, &'static str> {
     }
 
     if !conf.help && !conf.print_records {
-        if conf.dataset.is_empty() && conf.subnets.lock().unwrap().is_empty() {
+        if conf.dataset.is_empty() && conf.subnets.lock().unwrap().0.is_empty() {
             return Err("One of the two parameters --dataset or --subnet must be specified");
         }
 
-        if !conf.dataset.is_empty() && !conf.subnets.lock().unwrap().is_empty() {
+        if !conf.dataset.is_empty() && !conf.subnets.lock().unwrap().0.is_empty() {
             return Err("Parameters --dataset and --subnet are mutually exclusive");
-        }
-
-        if conf.subnets.lock().unwrap().len() > 1 {
-            return Err("The --subnet parameter has been specified more than once. Multiple subnets are not yet supported");
         }
 
         if conf.definitions_paths.is_empty() {

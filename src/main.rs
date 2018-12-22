@@ -45,13 +45,13 @@ fn usage() {
 
                     An example of a compatible dataset is the forward DNS dataset by Rapid7 (https://opendata.rapid7.com/sonar.fdns_v2/)
             
-            --subnet <192.168.0.1/24>
+            --subnet <192.168.0.1/24> [--subnet <192.168.1.1/24>]
                 Description:
-                    Scan a subnet
+                    Scan one or more subnets
 
         Optional arguments:
 
-            --def <file> (default: all the files in resources/definitions)
+            --def <file1> [--def <file2>] (default: all the files in resources/definitions)
                 Description:
                     - Multiple definitions can be selected (eg. --def wordpress --def vnc)
                     - Accepted formats are:

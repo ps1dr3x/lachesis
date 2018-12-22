@@ -26,7 +26,7 @@ pub struct LacConf {
     pub definitions_paths: Vec<String>,
     pub definitions: Vec<Definition>,
     pub dataset: String,
-    pub subnets: Arc<Mutex<Vec<Ipv4AddrRange>>>,
+    pub subnets: Arc<Mutex<(Vec<Ipv4AddrRange>, usize)>>,
     pub debug: bool,
     pub help: bool,
     pub max_targets: usize,
@@ -39,7 +39,7 @@ impl LacConf {
             definitions_paths: Vec::new(),
             definitions: Vec::new(),
             dataset: String::new(),
-            subnets: Arc::new(Mutex::new(Vec::new())),
+            subnets: Arc::new(Mutex::new((Vec::new(), 0))),
             debug: false,
             help: false,
             max_targets: 0,
@@ -115,12 +115,12 @@ pub fn lachesis(conf: &LacConf) -> Result<(), i32> {
     // Spawn worker
     let conf_inner = conf.clone();
     let thread = thread::spawn(move || {
-        worker::run(tx, conf_inner);
+        worker::run(&tx, conf_inner);
     });
 
     // Manage worker's messages
     loop {
-        let lr = match rx.try_recv() {
+        let lr = match rx.recv() {
             Ok(lr) => lr,
             Err(_err) => continue
         };
@@ -143,7 +143,7 @@ pub fn lachesis(conf: &LacConf) -> Result<(), i32> {
         let mut matching = false;
         if !lr.is_next_target_message() {
             stats.log(format!(
-                "[{}][{}:{}] Received message from worker. Length: {}",
+                "[{}][{}:{}] Received a response. Length: {}",
                 lr.target.protocol.blue(),
                 host.cyan(),
                 lr.target.port.to_string().cyan(),
