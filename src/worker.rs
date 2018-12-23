@@ -347,7 +347,7 @@ pub fn run(tx: &mpsc::Sender<LacMessage>, conf: LacConf) {
                 let dataset_file = File::open(dataset_path).unwrap();
                 let mut easy_reader = EasyReader::new(dataset_file).unwrap();
 
-                // Pick a random dns record and exclude records which are not of type A
+                // Pick a random dns record (excluding records which are not of type A)
                 let line_str = easy_reader.random_line().unwrap().unwrap();
                 let dataset_record: DatasetRecord = serde_json::from_str(&line_str).unwrap();
                 if dataset_record.record_type != "a" { continue; }

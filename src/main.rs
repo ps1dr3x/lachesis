@@ -31,7 +31,7 @@ fn usage() {
         Usage:
 
             lachesis --dataset <dataset.json> [...optional arguments]
-            lachesis --subnet <192.168.0.1/24> [...optional arguments]
+            lachesis --subnet <192.168.0.1/24> [--subnet <192.168.1.1/24>] [...optional arguments]
 
         Mandatory arguments:
 
