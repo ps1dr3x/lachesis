@@ -8,7 +8,7 @@ VERSION=$(grep -oP '(?<=version = ")(\d\.\d\.\d)(?=")' Cargo.toml)
 echo "Building Lachesis $VERSION"
 
 # Create a directory for the version
-mkdir dist/lachesis-$VERSION
+mkdir -p dist/lachesis-$VERSION
 
 # Compile
 cargo build --release
