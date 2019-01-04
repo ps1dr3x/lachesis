@@ -5,3 +5,5 @@ logs/*
 !logs/.gitkeep
 db/*
 !db/.gitkeep
+dist/*
+!dist/.gitkeep
