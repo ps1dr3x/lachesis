@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate validator_derive;
+
 mod lachesis;
 mod worker;
 mod detector;

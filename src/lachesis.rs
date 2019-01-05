@@ -13,6 +13,7 @@ use serde_derive::{
 use ipnet::Ipv4AddrRange;
 use unindent::unindent;
 use colored::Colorize;
+use validator::Validate;
 use crate::db::DbMan;
 use crate::worker::{
     self,
@@ -20,6 +21,13 @@ use crate::worker::{
 };
 use crate::detector;
 use crate::stats::Stats;
+use crate::utils::{
+    validate_definition,
+    validate_protocol,
+    validate_regex,
+    validate_semver,
+    validate_regex_ver
+};
 
 #[derive(Clone, Debug)]
 pub struct LacConf {
@@ -48,12 +56,16 @@ impl LacConf {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Validate)]
+#[validate(schema(function = "validate_definition"))]
 pub struct Definition {
     pub name: String,
+    #[validate(custom = "validate_protocol")]
     pub protocol: String,
     pub options: Options,
+    #[validate]
     pub service: Service,
+    #[validate]
     pub versions: Option<Versions>
 }
 
@@ -64,33 +76,41 @@ pub struct Options {
     pub message: Option<String>
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Validate)]
 pub struct Service {
+    #[validate(custom = "validate_regex")]
     pub regex: String,
     pub log: bool
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Validate)]
 pub struct Versions {
+    #[validate]
     pub semver: Option<SemverVersions>,
+    #[validate(custom = "validate_regex_ver")]
     pub regex: Option<Vec<RegexVersion>>
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Validate)]
 pub struct SemverVersions {
+    #[validate(custom = "validate_regex")]
     pub regex: String,
+    #[validate]
     pub ranges: Vec<RangeVersion>
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Validate)]
 pub struct RangeVersion {
+    #[validate(custom = "validate_semver")]
     pub from: String,
+    #[validate(custom = "validate_semver")]
     pub to: String,
     pub description: String
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Validate)]
 pub struct RegexVersion {
+    #[validate(custom = "validate_regex")]
     pub regex: String,
     pub version: String,
     pub description: String

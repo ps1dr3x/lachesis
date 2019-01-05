@@ -21,6 +21,8 @@ rand = "=0.6.3"
 colored = "=1.6.1"
 iprange = "=0.6.2"
 ipnet = "=2.0.0"
+validator = "=0.8.0"
+validator_derive = "=0.8.0"
 
 [dependencies.rusqlite]
 version = "=0.16.0"
