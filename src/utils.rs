@@ -8,17 +8,11 @@ use std::{
 };
 use rusqlite;
 use serde_json;
-use regex::Regex;
-use semver::Version;
 use ipnet::Ipv4Net;
-use validator::{
-    Validate,
-    ValidationError
-};
+use validator::Validate;
 use crate::lachesis::{
     LacConf,
-    Definition,
-    RegexVersion
+    Definition
 };
 use crate::db::DbMan;
 
@@ -149,7 +143,7 @@ pub fn read_validate_definitions(paths: &[String]) -> Result<Vec<Definition>, St
             }
         };
 
-        // Json parsing/structure validation
+        // Json parsing/validation
         let definitions_part: Result<Vec<Definition>, serde_json::Error> = serde_json::from_reader(def_file);
         let definitions_part = match definitions_part {
             Ok(definitions_part) => definitions_part,
@@ -163,7 +157,7 @@ pub fn read_validate_definitions(paths: &[String]) -> Result<Vec<Definition>, St
 
         definitions.extend_from_slice(&definitions_part);
 
-        // Definitions fields validation
+        // Fields validation
         for def in &definitions_part {
             match def.validate() {
                 Ok(_) => (),
@@ -179,38 +173,3 @@ pub fn read_validate_definitions(paths: &[String]) -> Result<Vec<Definition>, St
 
     Ok(definitions)
 }
-
-pub fn validate_protocol(protocol: &String) -> Result<(), ValidationError> {
-    match protocol.as_str() {
-        "http/s" | "tcp/custom" => Ok(()),
-        _ => Err(ValidationError::new("Invalid protocol"))
-    }
-}
-
-pub fn validate_regex(regex: &String) -> Result<(), ValidationError> {
-    match Regex::new(regex) {
-        Ok(_re) => Ok(()),
-        Err(_err) => Err(ValidationError::new("Invalid regex"))
-    }
-}
-
-pub fn validate_regex_ver(rv: &Vec<RegexVersion>) -> Result<(), ValidationError> {
-    for re in rv { validate_regex(&re.regex)?; }
-    Ok(())
-}
-
-pub fn validate_semver(semver: &String) -> Result<(), ValidationError> {
-    match Version::parse(&semver) {
-        Ok(_) => Ok(()),
-        Err(_err) => Err(ValidationError::new("Invalid semver"))
-    }
-}
-
-pub fn validate_definition(def: &Definition) -> Result<(), ValidationError> {
-    if def.protocol.as_str() == "tcp/custom" && def.options.message.is_none() {
-        Err(ValidationError::new("Missing mandatory option 'message' for protocol tcp/custom"))
-    } else {
-        Ok(())
-    }
-}
-

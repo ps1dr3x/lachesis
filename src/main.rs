@@ -7,6 +7,7 @@ mod detector;
 mod utils;
 mod db;
 mod stats;
+mod validators;
 
 use std::process;
 use unindent::unindent;

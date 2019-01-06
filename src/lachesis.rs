@@ -21,7 +21,7 @@ use crate::worker::{
 };
 use crate::detector;
 use crate::stats::Stats;
-use crate::utils::{
+use crate::validators::{
     validate_definition,
     validate_protocol,
     validate_regex,
