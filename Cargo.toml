@@ -24,6 +24,10 @@ ipnet = "=2.0.0"
 validator = "=0.8.0"
 validator_derive = "=0.8.0"
 
+[dependencies.clap]
+version = "=2.32.0"
+features = ["yaml"]
+
 [dependencies.rusqlite]
 version = "=0.16.0"
 features = ["bundled"]

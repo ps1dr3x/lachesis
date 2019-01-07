@@ -1,0 +1,59 @@
+name: Lachesis
+version: "v0.1.0"
+author: Michele Federici (@ps1dr3x) <michele@federici.tech>
+args:
+  - dataset:
+      short: D
+      long: dataset
+      value_name: FILE
+      help: |
+        The full path of the DNS dataset used for the requests. The accepted format is:
+
+        {"name":"example.com","type":"a","value":"93.184.216.34"}
+        {"name":"example.net","type":"a","value":"93.184.216.34"}
+        {"name":"example.org","type":"a","value":"93.184.216.34"}
+
+        An example of a compatible dataset is the forward DNS dataset by Rapid7 (https://opendata.rapid7.com/sonar.fdns_v2/)
+         
+      takes_value: true
+      required_unless: subnet
+      conflicts_with:
+        - subnet
+  - subnet:
+      short: S
+      long: subnet
+      value_name: SUBNET
+      help: |
+        Scan one or more subnets
+         
+      takes_value: true
+      multiple: true
+      required_unless: dataset
+      conflicts_with:
+        - dataset
+  - def:
+      short: d
+      long: def
+      value_name: FILE
+      help: |
+        Default: all the files in resources/definitions
+         
+        Multiple definitions can be selected (eg. --def wordpress --def vnc)
+        Accepted formats are:
+          File name with or without extension (eg. vnc.json or vnc). The json file will be searched in directory resources/definitions/
+          Full/relative path to file (eg. resources/definitions/vnc.json or /casual_path/mydef.json)
+          
+      takes_value: true
+      multiple: true
+  - max_targets:
+      short: m
+      long: max-targets
+      value_name: NUM
+  - print_records:
+      short: p
+      long: print-records
+      help: Print all the db's records
+  - debug:
+      short: v
+      long: debug
+      help: Print debug messages

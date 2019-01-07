@@ -29,14 +29,13 @@ use crate::validators::{
     validate_regex_ver
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Validate)]
 pub struct LacConf {
-    pub definitions_paths: Vec<String>,
+    #[validate]
     pub definitions: Vec<Definition>,
     pub dataset: String,
     pub subnets: Arc<Mutex<(Vec<Ipv4AddrRange>, usize)>>,
     pub debug: bool,
-    pub help: bool,
     pub max_targets: usize,
     pub print_records: bool
 }
@@ -44,12 +43,10 @@ pub struct LacConf {
 impl LacConf {
     pub fn default() -> LacConf {
         LacConf {
-            definitions_paths: Vec::new(),
             definitions: Vec::new(),
             dataset: String::new(),
             subnets: Arc::new(Mutex::new((Vec::new(), 0))),
             debug: false,
-            help: false,
             max_targets: 0,
             print_records: false
         }
