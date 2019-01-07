@@ -13,38 +13,39 @@ This project was born as a simple test of the Rust's networking (and asynchronou
                       v0.1.0
 -------------8<-------------
 
-Usage:
+Lachesis v0.1.0
+Michele Federici (@ps1dr3x) <michele@federici.tech>
 
-    lachesis --dataset <dataset.json> [...optional arguments]
-    lachesis --subnet <192.168.0.1/24> [--subnet <192.168.1.1/24>] [...optional arguments]
+USAGE:
+    lachesis [FLAGS] [OPTIONS] --dataset <FILE> --subnet <SUBNET>...
 
-Mandatory arguments:
+FLAGS:
+    -v, --debug            Print debug messages
+    -h, --help             Prints help information
+    -p, --print-records    Print all the db's records
+    -V, --version          Prints version information
 
-    --dataset <dataset.json>
-        Description:
-            The full path of the DNS dataset used for the requests. The accepted format is:
-
-            {"name":"example.com","type":"a","value":"93.184.216.34"}
-            {"name":"example.net","type":"a","value":"93.184.216.34"}
-            {"name":"example.org","type":"a","value":"93.184.216.34"}
-
-            An example of a compatible dataset is the forward DNS dataset by Rapid7 (https://opendata.rapid7.com/sonar.fdns_v2/)
-    
-    --subnet <192.168.0.1/24> [--subnet <192.168.1.1/24>]
-        Description:
-            Scan one or more subnets
-
-Optional arguments:
-
-    --def <file1> [--def <file2>] (default: all the files in resources/definitions)
-        Description:
-            - Multiple definitions can be selected (eg. --def wordpress --def vnc)
-            - Accepted formats are:
-                - File name with or without extension (eg. vnc.json or vnc). The json file will be searched in directory resources/definitions/
-                - Full/relative path to file (eg. resources/definitions/vnc.json or /casual_path/mydef.json)
-    --max-targets <NUM> (default: ∞)
-    --debug
-    --print-records
+OPTIONS:
+    -D, --dataset <FILE>        The full path of the DNS dataset used for the requests. The accepted format is:
+                                
+                                {"name":"example.com","type":"a","value":"93.184.216.34"}
+                                {"name":"example.net","type":"a","value":"93.184.216.34"}
+                                {"name":"example.org","type":"a","value":"93.184.216.34"}
+                                
+                                An example of a compatible dataset is the forward DNS dataset by Rapid7
+                                (https://opendata.rapid7.com/sonar.fdns_v2/)
+                                 
+    -d, --def <FILE>...         Default: all the files in resources/definitions
+                                 
+                                Multiple definitions can be selected (eg. --def wordpress --def vnc)
+                                Accepted formats are:
+                                  File name with or without extension (eg. vnc.json or vnc). The json file will be
+                                searched in directory resources/definitions/
+                                  Full/relative path to file (eg. resources/definitions/vnc.json or
+                                /casual_path/mydef.json)
+                                  
+    -m, --max-targets <NUM>     
+    -S, --subnet <SUBNET>...    Scan one or more subnets
 ```
 
 ## Roadmap / TODOs
