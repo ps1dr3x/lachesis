@@ -17,7 +17,7 @@ use validator::Validate;
 use crate::db::DbMan;
 use crate::worker::{
     self,
-    LacMessage
+    WorkerMessage
 };
 use crate::detector;
 use crate::stats::Stats;
@@ -28,6 +28,10 @@ use crate::validators::{
     validate_semver,
     validate_regex_ver
 };
+use crate::web::{
+    self,
+    UIMessage
+};
 
 #[derive(Clone, Debug, Validate)]
 pub struct LacConf {
@@ -37,6 +41,7 @@ pub struct LacConf {
     pub subnets: Arc<Mutex<(Vec<Ipv4AddrRange>, usize)>>,
     pub debug: bool,
     pub max_targets: usize,
+    pub web_ui: bool,
     pub print_records: bool
 }
 
@@ -48,6 +53,7 @@ impl LacConf {
             subnets: Arc::new(Mutex::new((Vec::new(), 0))),
             debug: false,
             max_targets: 0,
+            web_ui: false,
             print_records: false
         }
     }
@@ -113,7 +119,34 @@ pub struct RegexVersion {
     pub description: String
 }
 
-pub fn lachesis(conf: &LacConf) -> Result<(), i32> {
+pub fn run(conf: &LacConf) -> Result<(), i32> {
+    if conf.web_ui {
+        ui()
+    } else {
+        worker(conf)
+    }
+}
+
+fn ui() -> Result<(), i32> {
+    // Initialize the communication channel
+    let (tx, rx): (mpsc::Sender<UIMessage>, mpsc::Receiver<UIMessage>) = mpsc::channel();
+
+    // Run the Web UI
+    thread::spawn(move || {
+        web::run(tx);
+    });
+
+    // Manage Web UI's messages
+    loop {
+        let msg = match rx.recv() {
+            Ok(msg) => msg,
+            Err(_err) => continue
+        };
+        println!("{}", msg.message);
+    }
+}
+
+fn worker(conf: &LacConf) -> Result<(), i32> {
     // Initialize the stats/logs manager
     let mut stats = Stats::new(conf.max_targets, conf.debug);
 
@@ -127,50 +160,50 @@ pub fn lachesis(conf: &LacConf) -> Result<(), i32> {
     };
 
     // Initialize the communication channel
-    let (tx, rx): (mpsc::Sender<LacMessage>, mpsc::Receiver<LacMessage>) = mpsc::channel();
+    let (tx, rx): (mpsc::Sender<WorkerMessage>, mpsc::Receiver<WorkerMessage>) = mpsc::channel();
 
-    // Spawn worker
-    let conf_inner = conf.clone();
+    // Run the Worker
+    let inner_conf = conf.clone();
     let thread = thread::spawn(move || {
-        worker::run(&tx, conf_inner);
+        worker::run(&tx, inner_conf);
     });
 
     // Manage worker's messages
     loop {
-        let lr = match rx.recv() {
-            Ok(lr) => lr,
+        let msg = match rx.recv() {
+            Ok(msg) => msg,
             Err(_err) => continue
         };
 
-        if lr.is_log() {
-            stats.log_debug(lr.message);
+        if msg.is_log() {
+            stats.log_debug(msg.message);
             continue;
         }
 
-        if lr.is_last_message() {
+        if msg.is_last_message() {
             break;
         }
 
-        let host = if !lr.target.domain.is_empty() {
-            lr.target.domain.clone()
+        let host = if !msg.target.domain.is_empty() {
+            msg.target.domain.clone()
         } else {
-            lr.target.ip.clone()
+            msg.target.ip.clone()
         };
 
         let mut matching = false;
-        if !lr.is_next_target_message() {
+        if !msg.is_next_target_message() {
             stats.log(format!(
                 "[{}][{}:{}] Received a response. Length: {}",
-                lr.target.protocol.blue(),
+                msg.target.protocol.blue(),
                 host.cyan(),
-                lr.target.port.to_string().cyan(),
-                lr.target.response.len().to_string().cyan()
+                msg.target.port.to_string().cyan(),
+                msg.target.response.len().to_string().cyan()
             ));
 
             let responses = detector::detect(
                 &host,
-                lr.target.port,
-                &lr.target.response,
+                msg.target.port,
+                &msg.target.response,
                 &conf.definitions
             );
 
@@ -212,7 +245,7 @@ pub fn lachesis(conf: &LacConf) -> Result<(), i32> {
             }
         }
 
-        stats.increment(lr.is_next_target_message(), &lr.target.protocol, matching);
+        stats.increment(msg.is_next_target_message(), &msg.target.protocol, matching);
     }
 
     // Join the worker's thread

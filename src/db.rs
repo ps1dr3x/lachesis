@@ -5,10 +5,14 @@ use rusqlite::{
     NO_PARAMS,
     types::ToSql
 };
+use serde_derive::{
+    Serialize,
+    Deserialize
+};
 use crate::detector::DetectorResponse;
 
-#[derive(Debug)]
-pub struct ServicesResult {
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ServicesRow {
     pub id: u32,
     pub time_created: String,
     pub service: String,
@@ -55,7 +59,7 @@ impl DbMan {
         )
     }
 
-    pub fn get_all_services(&self) -> Result<Vec<ServicesResult>, Error> {
+    pub fn get_all_services(&self) -> Result<Vec<ServicesRow>, Error> {
         let mut qy = self.conn.prepare("
             SELECT id,
                 time_created,
@@ -68,7 +72,7 @@ impl DbMan {
         ")?;
 
         let services_iter = qy.query_map(NO_PARAMS, |row| {
-            ServicesResult {
+            ServicesRow {
                 id: row.get(0),
                 time_created: row.get(1),
                 service: row.get(2),

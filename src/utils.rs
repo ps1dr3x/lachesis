@@ -124,6 +124,7 @@ pub fn get_conf() -> Result<LacConf, &'static str> {
         subnets,
         debug: matches.is_present("debug"),
         max_targets,
+        web_ui: matches.is_present("web_ui"),
         print_records: matches.is_present("print_records")
     })
 }

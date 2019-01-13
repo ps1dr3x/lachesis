@@ -16,9 +16,12 @@ args:
         An example of a compatible dataset is the forward DNS dataset by Rapid7 (https://opendata.rapid7.com/sonar.fdns_v2/)
          
       takes_value: true
-      required_unless: subnet
+      required_unless_one:
+        - subnet
+        - web_ui
       conflicts_with:
         - subnet
+        - web_ui
   - subnet:
       short: S
       long: subnet
@@ -28,9 +31,12 @@ args:
          
       takes_value: true
       multiple: true
-      required_unless: dataset
+      required_unless_one:
+        - dataset
+        - web_ui
       conflicts_with:
         - dataset
+        - web_ui
   - def:
       short: d
       long: def
@@ -45,14 +51,22 @@ args:
           
       takes_value: true
       multiple: true
+      conflicts_with: web_ui
   - max_targets:
       short: m
       long: max-targets
       value_name: NUM
-  - print_records:
-      short: p
-      long: print-records
-      help: Print all the db's records
+      conflicts_with: web_ui
+  - web_ui:
+      short: w
+      long: web-ui
+      help: Serve a web app (and a basic API) to visualize/explore collected data
+      required_unless_one:
+        - dataset
+        - subnet
+      conflicts_with:
+        - dataset
+        - subnet
   - debug:
       short: v
       long: debug

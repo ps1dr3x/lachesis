@@ -1,7 +1,8 @@
-#[macro_use]
-extern crate clap;
-#[macro_use]
-extern crate validator_derive;
+#![feature(proc_macro_hygiene, decl_macro)]
+
+#[macro_use] extern crate clap;
+#[macro_use] extern crate validator_derive;
+#[macro_use] extern crate rocket;
 
 mod lachesis;
 mod worker;
@@ -10,11 +11,11 @@ mod utils;
 mod db;
 mod stats;
 mod validators;
+mod web;
 
 use std::process;
 use unindent::unindent;
 use colored::Colorize;
-use crate::lachesis::lachesis;
 
 fn logo() {
     println!("{}", unindent("
@@ -54,7 +55,7 @@ fn run_lachesis() -> Result<(), i32> {
         }
     }
 
-    lachesis(&conf)
+    lachesis::run(&conf)
 }
 
 fn main() {

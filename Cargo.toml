@@ -23,6 +23,8 @@ iprange = "=0.6.2"
 ipnet = "=2.0.0"
 validator = "=0.8.0"
 validator_derive = "=0.8.0"
+rocket = "=0.4.0"
+rocket_contrib = "=0.4.0"
 
 [dependencies.clap]
 version = "=2.32.0"
