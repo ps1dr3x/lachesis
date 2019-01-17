@@ -54,22 +54,35 @@ OPTIONS:
 - Add much more definitions
 - Expand the scanner's capabilities to other configurations and scanning methods
 - Do some information gathering on the host after each finding
-- Serve a web app that shows the services stored in the database on a map
+- Improve the API and the Web UI (a geo map would be nice)
 
 ## Build from source
 
 ### Dependencies
 
-- [Rust](https://rustup.rs/) (>1.31)
+- [Rust](https://rustup.rs/): >1.31
+- [Node.js, Npm](https://nodejs.org): Needed for the Web UI (front end) part
 
-### Compile and run
+### Compile and run (development)
+
+#### Web UI
+
+If you don't intend to work on the Web UI (front end) part, you can do this only once. If you don't intend to use the Web UI, this can be skipped.
+
+```bash
+cd src/ui
+npm install
+npm run build # or npm run watch
+```
+
+#### Lachesis
 
 ```bash
 cargo run -- --help
 ```
 
-### Production build
+### Production build (Web UI + Lachesis)
 
 ```bash
-./build-release.sh
+./scripts/build-release.sh
 ```

@@ -5,12 +5,24 @@ set -e
 
 # Get current version from Cargo.toml
 VERSION=$(grep -oP '(?<=version = ")(\d\.\d\.\d)(?=")' Cargo.toml)
-echo "Building Lachesis $VERSION"
+printf "\nBuilding Lachesis $VERSION\n\n"
 
 # Create a directory for the version
 mkdir dist/lachesis-$VERSION
 
-# Compile
+# Change dir to the web-ui root
+cd src/ui
+
+# Install Web UI dependencies
+npm install
+
+# Run the Web UI build script
+npm run build
+
+# Back to project root
+cd ../..
+
+# Compile Lachesis
 cargo build --release
 cp target/release/lachesis dist/lachesis-$VERSION
 
@@ -21,4 +33,4 @@ cp -R resources dist/lachesis-$VERSION
 mkdir dist/lachesis-$VERSION/db
 
 # Notify success
-echo "Build succeeded: dist/lachesis-$VERSION"
+printf "\nBuild succeeded: dist/lachesis-$VERSION\n\n"

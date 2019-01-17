@@ -7,3 +7,8 @@ db/*
 !db/.gitkeep
 dist/*
 !dist/.gitkeep
+resources/ui/*
+!resources/ui/index.html
+!resources/ui/assets
+resources/ui/assets/*
+!resources/ui/assets/.gitkeep
