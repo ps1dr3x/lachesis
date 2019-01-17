@@ -1,72 +1,69 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Label, Table } from 'semantic-ui-react'
+import uuid from 'uuid/v4'
 import 'style/data-table.scss'
 
 /* global fetch */
 
-class DataTable extends React.Component {
-  constructor (props) {
-    super(props)
+function DataTable () {
+  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState(null)
 
-    this.state = {
-      isLoading: true,
-      headers: [],
-      rows: []
+  async function getData () {
+    let services = null
+    try {
+      services = await fetch('api/services')
+        .then((res) => res.json())
+    } catch (ex) {}
+
+    setLoading(false)
+
+    if (services === null) {
+      setData(null)
+    } else {
+      setData({
+        headers: Object.keys(services[0]),
+        rows: services.map((row) => Object.values(row))
+      })
     }
   }
 
-  async componentDidMount () {
-    this.setState({ isLoading: true })
+  useEffect(() => {
+    getData()
+  }, {})
 
-    let [headers, rows] = await this.getData()
-
-    this.setState({
-      isLoading: false,
-      headers,
-      rows
-    })
+  if (loading) {
+    return <p>Loading...</p>
   }
 
-  async getData () {
-    let services = await fetch('api/services')
-      .then((res) => res.json())
-
-    if (!services.length) {
-      return [null, null]
-    }
-
-    return [
-      Object.keys(services[0]),
-      services.map((row) => Object.values(row))
-    ]
+  if (data === null) {
+    return <p>Fetch error</p>
   }
 
-  render () {
-    return (
-      <Table celled>
-        <Table.Header>
-          <Table.Row>
-            {
-              this.state.headers.map((el) => {
-                return <Table.HeaderCell>{el}</Table.HeaderCell>
-              })
-            }
-          </Table.Row>
-        </Table.Header>
-        <Table.Body>
+  return (
+    <Table celled>
+      <Table.Header>
+        <Table.Row>
           {
-            this.state.rows.map((fields) => {
-              let cells = []
-              for (let field of fields) {
-                cells.push(<Table.Cell><Label>{field}</Label></Table.Cell>)
-              }
-              return <Table.Row>{cells}</Table.Row>
+            data.headers.map((el) => {
+              return <Table.HeaderCell key={uuid()}>{el}</Table.HeaderCell>
             })
           }
-        </Table.Body>
-      </Table>
-    )
-  }
+        </Table.Row>
+      </Table.Header>
+      <Table.Body>
+        {
+          data.rows.map((fields) => {
+            let cells = []
+            for (let field of fields) {
+              cells.push(<Table.Cell key={uuid()}><Label>{field}</Label></Table.Cell>)
+            }
+            return <Table.Row key={fields[0]}>{cells}</Table.Row>
+          })
+        }
+      </Table.Body>
+    </Table>
+  )
 }
 
 export default DataTable
