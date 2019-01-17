@@ -9,7 +9,6 @@ use std::{
     },
     path::Path
 };
-use rusqlite;
 use serde_json;
 use ipnet::Ipv4Net;
 use validator::Validate;
@@ -18,17 +17,16 @@ use crate::lachesis::{
     LacConf,
     Definition
 };
-use crate::db::DbMan;
 
 pub fn get_conf() -> Result<LacConf, &'static str> {
     // Get cli parameters according to the definition file
     let cli_yaml = load_yaml!("cli.yml");
     let matches = App::from_yaml(cli_yaml).get_matches();
 
-    // If --print-records/-p option is specified, nothing else is needed
-    if matches.is_present("print_records") {
+    // If --web-ui/-w option is specified, nothing else is needed
+    if matches.is_present("web_ui") {
         let mut conf = LacConf::default();
-        conf.print_records = true;
+        conf.web_ui = true;
         return Ok(conf);
     }
 
@@ -124,8 +122,7 @@ pub fn get_conf() -> Result<LacConf, &'static str> {
         subnets,
         debug: matches.is_present("debug"),
         max_targets,
-        web_ui: matches.is_present("web_ui"),
-        print_records: matches.is_present("print_records")
+        web_ui: false
     })
 }
 
@@ -169,20 +166,4 @@ pub fn parse_validate_definitions(paths: &[String]) -> Result<Vec<Definition>, S
     }
 
     Ok(definitions)
-}
-
-pub fn print_records() -> Result<(), rusqlite::Error> {
-    let dbm = DbMan::init()?;
-
-    let records = dbm.get_all_services()?;
-    if records.is_empty() {
-        println!("Db is empty or not exists yet\n");
-        return Ok(());
-    }
-    println!("{} records:\n", records.len());
-    for rec in records {
-        println!("{:?}", rec);
-    }
-
-    Ok(())
 }

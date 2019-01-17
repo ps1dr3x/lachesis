@@ -44,17 +44,6 @@ fn run_lachesis() -> Result<(), i32> {
         }
     };
 
-    // If --print-records/-p option is specified. Print records and exit
-    if conf.print_records {
-        match utils::print_records() {
-            Ok(()) => return Ok(()),
-            Err(err) => {
-                println!("\n[{}] Embedded db error: {}\n", "ERROR".red(), err);
-                return Err(1);
-            }
-        }
-    }
-
     lachesis::run(&conf)
 }
 

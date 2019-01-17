@@ -17,13 +17,13 @@ Lachesis v0.1.0
 Michele Federici (@ps1dr3x) <michele@federici.tech>
 
 USAGE:
-    lachesis [FLAGS] [OPTIONS] --dataset <FILE> --subnet <SUBNET>...
+    lachesis [FLAGS] [OPTIONS] --dataset <FILE> --subnet <SUBNET>... --web-ui
 
 FLAGS:
-    -v, --debug            Print debug messages
-    -h, --help             Prints help information
-    -p, --print-records    Print all the db's records
-    -V, --version          Prints version information
+    -v, --debug      Print debug messages
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+    -w, --web-ui     Serve a web app (and a basic API) to visualize/explore collected data
 
 OPTIONS:
     -D, --dataset <FILE>        The full path of the DNS dataset used for the requests. The accepted format is:

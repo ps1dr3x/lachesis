@@ -41,8 +41,7 @@ pub struct LacConf {
     pub subnets: Arc<Mutex<(Vec<Ipv4AddrRange>, usize)>>,
     pub debug: bool,
     pub max_targets: usize,
-    pub web_ui: bool,
-    pub print_records: bool
+    pub web_ui: bool
 }
 
 impl LacConf {
@@ -53,8 +52,7 @@ impl LacConf {
             subnets: Arc::new(Mutex::new((Vec::new(), 0))),
             debug: false,
             max_targets: 0,
-            web_ui: false,
-            print_records: false
+            web_ui: false
         }
     }
 }
