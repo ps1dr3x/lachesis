@@ -1,11 +1,7 @@
 .data-table {
-    margin: 0 auto;
+    min-height: 200px;
 
-    th {
-        text-align: center;
-    }
-
-    th, td {
-        width: 250px;
+    .ui.segment {
+        min-height: 200px;
     }
 }
