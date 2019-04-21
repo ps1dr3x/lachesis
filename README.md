@@ -86,3 +86,29 @@ cargo run -- --help
 ```bash
 ./scripts/build-release.sh
 ```
+
+### Troubleshooting
+
+#### "Too many open files" error
+
+Some Linux distributions are configured with a very low limit to the number of maximum opened files. In order to run this software properly, it could be needed to increment it.
+
+The following limits are only an example. Depending on the machine configuration and overall load they can be set higher or lower, only for an user or only for root
+
+- PAM (/etc/security/limits.conf)
+  ```
+  * - nofile 99999 # or username - nofile 99999
+  root soft nofile 99999
+  root hard nofile 99999
+  ```
+- Systemd (/etc/systemd/user.conf and /etc/systemd/system.conf)
+  ```
+  DefaultLimitNOFILE=99999
+  ```
+
+Note: To make the modification effective, a reboot is needed. The current limits can be checked using the commands:
+
+```bash
+ulimit -Hn #hard
+ulimit -Sn #soft
+```
