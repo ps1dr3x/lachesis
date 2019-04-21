@@ -146,9 +146,7 @@ pub fn run(tx: &mpsc::Sender<WorkerMessage>, conf: LacConf) {
                         let ip_s = ip.to_string();
                         Some(Target::new(ip_s.clone(), ip_s))
                     }
-                    None => {
-                        None
-                    }
+                    None => None
                 }
             };
 

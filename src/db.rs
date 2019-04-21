@@ -72,15 +72,15 @@ impl DbMan {
         ")?;
 
         let services_iter = qy.query_map(NO_PARAMS, |row| {
-            ServicesRow {
-                id: row.get(0),
-                time_created: row.get(1),
-                service: row.get(2),
-                version: row.get(3),
-                description: row.get(4),
-                host: row.get(5),
-                port: row.get(6)
-            }
+            Ok(ServicesRow {
+                id: row.get(0)?,
+                time_created: row.get(1)?,
+                service: row.get(2)?,
+                version: row.get(3)?,
+                description: row.get(4)?,
+                host: row.get(5)?,
+                port: row.get(6)?
+            })
         })?;
 
         let mut services_vec = Vec::new();
