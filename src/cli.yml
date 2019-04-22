@@ -66,6 +66,14 @@ args:
       conflicts_with:
         - web_ui
         - def
+  - user_agent:
+      short: u
+      long: user-agent
+      value_name: STRING
+      help: Sets a custom user agent (http/https)
+      takes_value: true
+      default_value: "lachesis/0.1.0"
+      conflicts_with: web_ui
   - max_targets:
       short: m
       long: max-targets
@@ -73,7 +81,12 @@ args:
       help: |
         Sets a maximum limit of targets
          
+      takes_value: true
       conflicts_with: web_ui
+  - debug:
+      short: v
+      long: debug
+      help: Print debug messages
   - web_ui:
       short: w
       long: web-ui
@@ -86,7 +99,3 @@ args:
       conflicts_with:
         - dataset
         - subnet
-  - debug:
-      short: v
-      long: debug
-      help: Print debug messages

@@ -136,7 +136,8 @@ pub fn run(tx: &mpsc::Sender<WorkerMessage>, conf: LacConf) {
                         http_s(
                             &tx_inner,
                             &target,
-                            &def.options
+                            &def.options,
+                            conf.user_agent.clone()
                         );
                     }
                     "tcp/custom" => {
@@ -174,7 +175,8 @@ pub fn run(tx: &mpsc::Sender<WorkerMessage>, conf: LacConf) {
 fn http_s(
     thread_tx: &mpsc::Sender<WorkerMessage>,
     target: &Target,
-    options: &Options
+    options: &Options,
+    user_agent: String
 ) {
     let https = match HttpsConnector::new(4) {
         Ok(https) => https,
@@ -220,7 +222,7 @@ fn http_s(
             let request = Request::builder()
                 .uri(uri)
                 .header("Host", target.domain.clone())
-                .header("User-Agent", "lachesis/0.1.0")
+                .header("User-Agent", user_agent.clone())
                 .header("Accept", "*/*")
                 .body(Body::empty())
                 .unwrap();

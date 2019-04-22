@@ -54,6 +54,8 @@ OPTIONS:
     -m, --max-targets <NUM>        Sets a maximum limit of targets
                                     
     -S, --subnet <SUBNET>...       Scan one or more subnets
+                                    
+    -u, --user-agent <STRING>      Sets a custom user agent (http/https) [default: lachesis/0.1.0]
 ```
 
 ## Roadmap / TODOs

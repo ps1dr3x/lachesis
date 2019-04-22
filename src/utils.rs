@@ -139,8 +139,9 @@ pub fn get_conf() -> Result<LacConf, &'static str> {
         definitions,
         dataset,
         subnets,
-        debug: matches.is_present("debug"),
+        user_agent: String::from(matches.value_of("user_agent").unwrap()),
         max_targets,
+        debug: matches.is_present("debug"),
         web_ui: false
     })
 }
