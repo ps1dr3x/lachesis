@@ -68,8 +68,9 @@ OPTIONS:
 
 ### Dependencies
 
-- [Rust](https://rustup.rs/): >1.31
+- [Rust](https://rustup.rs/): Usually nightly is needed
 - [Node.js, Npm](https://nodejs.org): Needed for the Web UI (front end) part
+- On Linux and BSD based OS: OpenSSL (libssl-dev on deb, openssl-devel on rpm)
 
 ### Compile and run (development)
 
