@@ -4,7 +4,12 @@
         "protocol": "http/s",
         "options": {
             "ports": [
-                80
+                80,
+                443,
+                8080,
+                8181,
+                8081,
+                8180
             ]
         },
         "service": {
