@@ -197,6 +197,7 @@ fn worker(conf: &LacConf) -> Result<(), i32> {
                 ));
 
                 let responses = detector::detect(
+                    &target.protocol,
                     &host,
                     target.port,
                     &target.response,

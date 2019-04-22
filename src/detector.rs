@@ -8,6 +8,7 @@ pub struct DetectorResponse {
     pub service: String,
     pub version: String,
     pub description: String,
+    pub protocol: String,
     pub host: String,
     pub port: u16,
     pub error: Option<String>
@@ -19,14 +20,16 @@ impl DetectorResponse {
             service: String::new(),
             version: String::new(),
             description: String::new(),
+            protocol: String::new(),
             host: String::new(),
             port: 0,
             error: None
         }
     }
 
-    fn new(host: String, port: u16) -> Self {
+    fn new(protocol: String, host: String, port: u16) -> Self {
         DetectorResponse {
+            protocol,
             host,
             port,
             ..DetectorResponse::default()
@@ -35,6 +38,7 @@ impl DetectorResponse {
 }
 
 pub fn detect(
+        protocol: &str,
         host: &str,
         port: u16,
         res_body: &str,
@@ -44,7 +48,11 @@ pub fn detect(
     let mut matching = Vec::new();
 
     for def in definitions {
-        let mut response = DetectorResponse::new(String::from(host), port);
+        let mut response = DetectorResponse::new(
+            String::from(protocol),
+            String::from(host),
+            port
+        );
 
         let re = Regex::new(def.service.regex.as_str()).unwrap();
 

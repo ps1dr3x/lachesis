@@ -18,6 +18,7 @@ pub struct ServicesRow {
     pub service: String,
     pub version: String,
     pub description: String,
+    pub protocol: String,
     pub host: String,
     pub port: u16
 }
@@ -37,6 +38,7 @@ impl DbMan {
                 service         TEXT,
                 version         TEXT,
                 description     TEXT NOT NULL,
+                protocol        TEXT NOT NULL,
                 host            TEXT NOT NULL,
                 port            INTEGER NOT NULL
             )
@@ -47,12 +49,13 @@ impl DbMan {
 
     pub fn save_service(&self, service: &DetectorResponse) -> Result<usize, Error> {
         self.conn.execute("
-            INSERT INTO services (service, version, description, host, port)
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            INSERT INTO services (service, version, description, protocol, host, port)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             ", &[
                 &service.service,
                 &service.version,
                 &service.description,
+                &service.protocol,
                 &service.host,
                 &service.port as &ToSql
             ]
@@ -66,6 +69,7 @@ impl DbMan {
                 service,
                 version,
                 description,
+                protocol,
                 host,
                 port
             FROM services
@@ -78,8 +82,9 @@ impl DbMan {
                 service: row.get(2)?,
                 version: row.get(3)?,
                 description: row.get(4)?,
-                host: row.get(5)?,
-                port: row.get(6)?
+                protocol: row.get(5)?,
+                host: row.get(6)?,
+                port: row.get(7)?
             })
         })?;
 
