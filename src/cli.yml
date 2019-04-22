@@ -48,19 +48,38 @@ args:
         Accepted formats are:
           File name with or without extension (eg. vnc.json or vnc). The json file will be searched in directory resources/definitions/
           Full/relative path to file (eg. resources/definitions/vnc.json or /casual_path/mydef.json)
-          
+           
       takes_value: true
       multiple: true
       conflicts_with: web_ui
+  - exclude_def:
+      short: e
+      long: exclude-def
+      value_name: FILE
+      help: |
+        If all the existing definitions are selected (no -d/--def values provided) is possible to exclude some of them using this argument.
+        Accepted formats are:
+          File name with or without extension (eg. vnc.json or vnc)
+           
+      takes_value: true
+      multiple: true
+      conflicts_with:
+        - web_ui
+        - def
   - max_targets:
       short: m
       long: max-targets
       value_name: NUM
+      help: |
+        Sets a maximum limit of targets
+         
       conflicts_with: web_ui
   - web_ui:
       short: w
       long: web-ui
-      help: Serve a web app (and a basic API) to visualize/explore collected data
+      help: |
+        Serve a web app (and a basic API) to visualize/explore collected data
+         
       required_unless_one:
         - dataset
         - subnet

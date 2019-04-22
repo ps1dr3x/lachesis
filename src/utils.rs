@@ -53,7 +53,8 @@ pub fn get_conf() -> Result<LacConf, &'static str> {
         0
     };
 
-    // Load definitions (selected ones or all the files in resources/definitions folder)
+    // Load definitions (selected ones or all the files in resources/definitions folder
+    // minus the excluded ones)
     let definitions_paths = match matches.values_of("def") {
         Some(paths) => {
             let mut defs = Vec::new();
@@ -74,10 +75,28 @@ pub fn get_conf() -> Result<LacConf, &'static str> {
         },
         None => {
             let mut defs = Vec::new();
+            let mut excluded = Vec::new();
+
+            if let Some(edefs) = matches.values_of("exclude_def") {
+                for edef in edefs {
+                    excluded.push(edef);
+                }
+            };
 
             let paths = fs::read_dir("resources/definitions").unwrap();
             for path in paths {
-                defs.push(path.unwrap().path().to_str().unwrap().to_string());
+                let path = path.unwrap();
+                let file_name = path.file_name();
+                let file_name = file_name.to_str().unwrap();
+                match file_name.find(".json") {
+                    Some(idx) => {
+                        if !excluded.contains(&file_name)
+                        && !excluded.contains(&&file_name[0..idx]) {
+                            defs.push(path.path().to_str().unwrap().to_string());
+                        }
+                    },
+                    None => return Err("Found extraneous files in resources/definitions (not .json)")
+                }
             }
 
             if defs.is_empty() {
