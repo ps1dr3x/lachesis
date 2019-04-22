@@ -21,6 +21,9 @@ use tokio::{
 };
 use hyper::{
     Client,
+    Uri,
+    Request,
+    Body,
     rt::{
         self,
         Future,
@@ -195,26 +198,35 @@ fn http_s(
 
     for protocol in ["https", "http"].iter() {
         for port in &options.ports {
-            let mut target_req = target.clone();
-            target_req.protocol = protocol.to_string();
-            target_req.port = *port;
+            let mut target = target.clone();
+            target.protocol = protocol.to_string();
+            target.port = *port;
 
-            let target_err = target_req.clone();
-            let target_timeout = target_req.clone();
+            let target_err = target.clone();
+            let target_timeout = target.clone();
             let thread_tx_req = thread_tx.clone();
             let thread_tx_err = thread_tx.clone();
             let thread_tx_timeout = thread_tx.clone();
-            let req_fut = client
-                .get(
-                    format!(
-                        "{}://{}:{}",
-                        target_req.protocol,
-                        target_req.domain,
-                        target_req.port
-                    )
-                    .parse()
-                    .unwrap()
+
+            let uri: Uri = format!(
+                    "{}://{}:{}",
+                    target.protocol,
+                    target.ip,
+                    target.port
                 )
+                .parse()
+                .unwrap();
+
+            let request = Request::builder()
+                .uri(uri)
+                .header("Host", target.domain.clone())
+                .header("User-Agent", "lachesis/0.1.0")
+                .header("Accept", "*/*")
+                .body(Body::empty())
+                .unwrap();
+            
+            let req_fut = client
+                .request(request)
                 .and_then(move |res| {
                     let (parts, body) = res.into_parts();
                     body.concat2().map(move |body_content| {
@@ -237,9 +249,9 @@ fn http_s(
                             raw_content,
                             String::from_utf8_lossy(&body_content.to_vec())
                         );
-                        target_req.response = raw_content;
+                        target.response = raw_content;
                         // Send the response
-                        thread_tx_req.send(WorkerMessage::Response(target_req)).unwrap();
+                        thread_tx_req.send(WorkerMessage::Response(target)).unwrap();
                     })
                 })
                 .map_err(move |err| {
@@ -256,6 +268,7 @@ fn http_s(
                         )
                     ).unwrap();
                 });
+
             let req_timeout = Timeout::new(req_fut, Duration::from_secs(5))
                 .map_err(move |_err| {
                     thread_tx_timeout.send(
