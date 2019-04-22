@@ -173,77 +173,80 @@ fn worker(conf: &LacConf) -> Result<(), i32> {
             Err(_err) => continue
         };
 
-        if msg.is_log() {
-            stats.log_debug(msg.message);
-            continue;
-        }
+        match msg {
+            WorkerMessage::Log(msg) => {
+                stats.log_debug(msg);
+                continue;
+            },
+            WorkerMessage::Shutdown => {
+                break;
+            },
+            WorkerMessage::Response(target) => {
+                let host = if !target.domain.is_empty() {
+                    target.domain.clone()
+                } else {
+                    target.ip.clone()
+                };
 
-        if msg.is_last_message() {
-            break;
-        }
+                stats.log(format!(
+                    "[{}][{}:{}] Received a response. Length: {}",
+                    target.protocol.blue(),
+                    host.cyan(),
+                    target.port.to_string().cyan(),
+                    target.response.len().to_string().cyan()
+                ));
 
-        let host = if !msg.target.domain.is_empty() {
-            msg.target.domain.clone()
-        } else {
-            msg.target.ip.clone()
-        };
+                let responses = detector::detect(
+                    &host,
+                    target.port,
+                    &target.response,
+                    &conf.definitions
+                );
 
-        let mut matching = false;
-        if !msg.is_next_target_message() {
-            stats.log(format!(
-                "[{}][{}:{}] Received a response. Length: {}",
-                msg.target.protocol.blue(),
-                host.cyan(),
-                msg.target.port.to_string().cyan(),
-                msg.target.response.len().to_string().cyan()
-            ));
-
-            let responses = detector::detect(
-                &host,
-                msg.target.port,
-                &msg.target.response,
-                &conf.definitions
-            );
-
-            if !responses.is_empty() {
-                for res in responses {
-                    if let Some(error) = res.error {
-                        stats.log(error);
-                        continue;
-                    }
-
-                    stats.log(unindent(format!("
-
-                        ===
-                        Matching service found: {}
-                        Service: {}
-                        Version: {}
-                        Description: {}
-                        ===
-
-                    ",
-                        res.host.green(),
-                        res.service.green(),
-                        res.version.green(),
-                        res.description.green()).as_str())
-                    );
-
-                    match dbm.save_service(&res) {
-                        Ok(_) => (),
-                        Err(err) => {
-                            stats.log(format!(
-                                "\n[{}] Error while saving a matching service in the embedded db: {}\n",
-                                "ERROR".red(), err
-                            ));
-                            return Err(1);
+                let mut matching = false;
+                if !responses.is_empty() {
+                    for res in responses {
+                        if let Some(error) = res.error {
+                            stats.log(error);
+                            continue;
                         }
-                    };
-                    matching = true;
-                }
-            }
-        }
 
-        stats.increment(msg.is_next_target_message(), &msg.target.protocol, matching);
+                        stats.log(unindent(format!("
+
+                            ===
+                            Matching service found: {}
+                            Service: {}
+                            Version: {}
+                            Description: {}
+                            ===
+
+                        ",
+                            res.host.green(),
+                            res.service.green(),
+                            res.version.green(),
+                            res.description.green()).as_str())
+                        );
+
+                        match dbm.save_service(&res) {
+                            Ok(_) => (),
+                            Err(err) => {
+                                stats.log(format!(
+                                    "\n[{}] Error while saving a matching service in the embedded db: {}\n",
+                                    "ERROR".red(), err
+                                ));
+                                return Err(1);
+                            }
+                        };
+                        matching = true;
+                    }
+                }
+
+                stats.increment(&target.protocol, matching);
+            },
+            WorkerMessage::NextTarget => {
+                stats.increment_targets();
+            }
+        };
     }
 
     // Join the worker's thread

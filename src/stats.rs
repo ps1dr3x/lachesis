@@ -45,27 +45,7 @@ impl Stats {
         }
     }
 
-    pub fn increment(&mut self, target: bool, protocol: &str, matching: bool) {
-        if target {
-            if self.max_targets != 0 {
-                self.progress_bar.set_position(self.targets as u64);
-            }
-
-            self.progress_bar.set_message(
-                &format!(
-                    "Targets {}   Https {}   Http {}   Tcp/custom {}   Matching {}",
-                    self.targets.to_string().cyan(),
-                    self.requests_https.to_string().cyan(),
-                    self.requests_http.to_string().cyan(),
-                    self.requests_tcp_custom.to_string().cyan(),
-                    self.services_found.to_string().cyan()
-                )
-            );
-
-            self.targets += 1;
-            return;
-        }
-
+    pub fn increment(&mut self, protocol: &str, matching: bool) {
         self.total_requests += 1;
 
         match protocol {
@@ -76,6 +56,31 @@ impl Stats {
         }
 
         if matching { self.services_found += 1; }
+
+        self.update_message();
+    }
+
+    pub fn increment_targets(&mut self) {
+        if self.max_targets != 0 {
+            self.progress_bar.set_position(self.targets as u64);
+        }
+
+        self.targets += 1;
+
+        self.update_message();
+    }
+
+    fn update_message(&self) {
+        self.progress_bar.set_message(
+            &format!(
+                "Targets {}   Https {}   Http {}   Tcp/custom {}   Matching {}",
+                self.targets.to_string().cyan(),
+                self.requests_https.to_string().cyan(),
+                self.requests_http.to_string().cyan(),
+                self.requests_tcp_custom.to_string().cyan(),
+                self.services_found.to_string().cyan()
+            )
+        );
     }
 
     pub fn log(&mut self, message: String) {
