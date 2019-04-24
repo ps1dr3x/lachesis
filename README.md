@@ -72,7 +72,9 @@ OPTIONS:
 
 - [Rust](https://rustup.rs/): Usually nightly is needed
 - [Node.js, Npm](https://nodejs.org): Needed for the Web UI (front end) part
-- On Linux and BSD based OS: OpenSSL (libssl-dev on deb, openssl-devel on rpm)
+- On Linux and BSD based OS:
+  - pkg-config (pkg-config on deb, pkg-config/pkgconfig/pkgconf-pkg-config on rpm)
+  - libssl (libssl-dev on deb, openssl-devel on rpm)
 
 ### Compile and run (development)
 
