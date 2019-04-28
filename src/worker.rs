@@ -4,7 +4,8 @@ use std::{
     path::Path,
     fs::File,
     net::SocketAddr,
-    io::BufReader
+    io::BufReader,
+    collections::HashSet
 };
 use serde_derive::{
     Serialize,
@@ -84,7 +85,7 @@ pub enum WorkerMessage {
 }
 
 pub fn run(tx: &mpsc::Sender<WorkerMessage>, conf: LacConf) {
-    let tx_inner = tx.clone();
+    let in_tx = tx.clone();
     rt::run(lazy(move || {
         let mut target_n = 0;
         while conf.max_targets == 0 || target_n < conf.max_targets {
@@ -130,25 +131,24 @@ pub fn run(tx: &mpsc::Sender<WorkerMessage>, conf: LacConf) {
             };
 
             // Requests
+            let mut http_s_ports = HashSet::new();
             for def in &conf.definitions {
                 match def.protocol.as_str() {
                     "http/s" => {
-                        http_s(
-                            &tx_inner,
-                            &target,
-                            &def.options,
-                            conf.user_agent.clone()
-                        );
+                        // Only one request per port
+                        for port in def.options.ports.clone() {
+                            http_s_ports.insert(port);
+                        }
                     }
                     "tcp/custom" => {
                         tcp_custom(
-                            &tx_inner,
+                            &in_tx,
                             &target,
                             def.options.clone()
                         );
                     }
                     _ => {
-                        tx_inner.send(
+                        in_tx.send(
                             WorkerMessage::Log(
                                 format!(
                                     "\n[{}] Skipping unknown protocol: {}\n",
@@ -159,10 +159,18 @@ pub fn run(tx: &mpsc::Sender<WorkerMessage>, conf: LacConf) {
                     }
                 }
             }
+            if http_s_ports.len() > 0 {
+                http_s(
+                    &in_tx,
+                    &target,
+                    http_s_ports,
+                    conf.user_agent.clone()
+                );
+            }
 
             // Increment the targets counts
             target_n += 1;
-            tx_inner.send(WorkerMessage::NextTarget).unwrap();
+            in_tx.send(WorkerMessage::NextTarget).unwrap();
         }
 
         future::ok(())
@@ -175,7 +183,7 @@ pub fn run(tx: &mpsc::Sender<WorkerMessage>, conf: LacConf) {
 fn http_s(
     thread_tx: &mpsc::Sender<WorkerMessage>,
     target: &Target,
-    options: &Options,
+    ports: HashSet<u16>,
     user_agent: String
 ) {
     let https = match HttpsConnector::new(4) {
@@ -199,7 +207,7 @@ fn http_s(
         .build::<_, hyper::Body>(https);
 
     for protocol in ["https", "http"].iter() {
-        for port in &options.ports {
+        for port in &ports {
             let mut target = target.clone();
             target.protocol = protocol.to_string();
             target.port = *port;
