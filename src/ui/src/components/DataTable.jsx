@@ -75,7 +75,7 @@ function DataTable () {
       setData(null)
     } else {
       setData({
-        headers: Object.keys(res.services[0]),
+        headers: res.services.length ? Object.keys(res.services[0]) : [],
         rows: res.services.map((row) => Object.values(row))
       })
 
@@ -194,22 +194,34 @@ function DataTable () {
         </Table.Header>
         <Table.Body>
           {
-            data.rows.map((fields) => {
-              let cells = []
-              for (let field of fields) {
-                cells.push(<Table.Cell key={uuid()}><Label>{field}</Label></Table.Cell>)
+            (() => {
+              if (data.rows.length) {
+                return data.rows.map((fields) => {
+                  let cells = []
+                  for (let field of fields) {
+                    cells.push(<Table.Cell key={uuid()}><Label>{field}</Label></Table.Cell>)
+                  }
+                  return (
+                    <Table.Row key={fields[0]}>
+                      <Table.Cell collapsing>
+                        <Checkbox
+                          checked={selection[fields[0]] === true}
+                          onChange={(e) => toggleSelection(fields[0])} />
+                      </Table.Cell>
+                      {cells}
+                    </Table.Row>
+                  )
+                })
+              } else {
+                return (
+                  <Table.Row textAlign='center'>
+                    <Table.Cell collapsing>
+                      No records yet!
+                    </Table.Cell>
+                  </Table.Row>
+                )
               }
-              return (
-                <Table.Row key={fields[0]}>
-                  <Table.Cell collapsing>
-                    <Checkbox
-                      checked={selection[fields[0]] === true}
-                      onChange={(e) => toggleSelection(fields[0])} />
-                  </Table.Cell>
-                  {cells}
-                </Table.Row>
-              )
-            })
+            })()
           }
         </Table.Body>
         <Table.Footer>
