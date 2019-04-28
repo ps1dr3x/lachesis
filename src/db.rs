@@ -12,7 +12,7 @@ use serde_derive::{
 use crate::detector::DetectorResponse;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ServicesRow {
+struct ServicesRow {
     pub id: u32,
     pub time_created: String,
     pub service: String,
@@ -21,6 +21,12 @@ pub struct ServicesRow {
     pub protocol: String,
     pub host: String,
     pub port: u16
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PaginatedServices {
+    services: Vec<ServicesRow>,
+    rows_count: u32
 }
 
 pub struct DbMan {
@@ -62,20 +68,19 @@ impl DbMan {
         )
     }
 
-    pub fn get_all_services(&self) -> Result<Vec<ServicesRow>, Error> {
+    pub fn get_paginated_services(&self, offset: u32, rows: u32) -> Result<PaginatedServices, Error> {
         let mut qy = self.conn.prepare("
-            SELECT id,
-                time_created,
-                service,
-                version,
-                description,
-                protocol,
-                host,
-                port
+            SELECT *
             FROM services
+            ORDER BY id
+            LIMIT ?
+            OFFSET ?
         ")?;
 
-        let services_iter = qy.query_map(NO_PARAMS, |row| {
+        let services_iter = qy.query_map(&[
+            &rows,
+            &offset
+        ], |row| {
             Ok(ServicesRow {
                 id: row.get(0)?,
                 time_created: row.get(1)?,
@@ -93,6 +98,25 @@ impl DbMan {
             services_vec.push(service?);
         }
 
-        Ok(services_vec)
+        let rows_count = self.conn.query_row(
+            "SELECT COUNT(*) FROM services",
+            NO_PARAMS,
+            |row| row.get(0)
+        )?;
+
+        Ok(PaginatedServices {
+            services: services_vec,
+            rows_count
+        })
+    }
+
+    pub fn delete_services (&self, ids: Vec<u32>) -> Result<(), Error> {
+        for n in &ids {
+            self.conn.execute(
+                "DELETE FROM services WHERE id = ?",
+                &[n]
+            )?;
+        }
+        Ok(())
     }
 }
