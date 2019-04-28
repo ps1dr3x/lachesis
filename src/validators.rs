@@ -6,26 +6,26 @@ use crate::lachesis::{
     RegexVersion
 };
 
-pub fn validate_protocol(protocol: &String) -> Result<(), ValidationError> {
-    match protocol.as_str() {
+pub fn validate_protocol(protocol: &str) -> Result<(), ValidationError> {
+    match protocol {
         "http/s" | "tcp/custom" => Ok(()),
         _ => Err(ValidationError::new("Invalid protocol"))
     }
 }
 
-pub fn validate_regex(regex: &String) -> Result<(), ValidationError> {
+pub fn validate_regex(regex: &str) -> Result<(), ValidationError> {
     match Regex::new(regex) {
         Ok(_re) => Ok(()),
         Err(_err) => Err(ValidationError::new("Invalid regex"))
     }
 }
 
-pub fn validate_regex_ver(rv: &Vec<RegexVersion>) -> Result<(), ValidationError> {
+pub fn validate_regex_ver(rv: &[RegexVersion]) -> Result<(), ValidationError> {
     for re in rv { validate_regex(&re.regex)?; }
     Ok(())
 }
 
-pub fn validate_semver(semver: &String) -> Result<(), ValidationError> {
+pub fn validate_semver(semver: &str) -> Result<(), ValidationError> {
     match Version::parse(&semver) {
         Ok(_) => Ok(()),
         Err(_err) => Err(ValidationError::new("Invalid semver"))
