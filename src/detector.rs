@@ -54,10 +54,9 @@ pub fn detect(
             port
         );
 
-        let re = Regex::new(def.service.regex.as_str()).unwrap();
-
-        let mat = match re.find(res_body) {
-            Some(mat) => mat,
+        let service_re = Regex::new(def.service.regex.as_str()).unwrap();
+        match service_re.find(res_body) {
+            Some(m) => m,
             None => continue
         };
 
@@ -72,14 +71,19 @@ pub fn detect(
         };
 
         if let Some(semver) = versions.semver {
+            let version_re = Regex::new(semver.regex.as_str()).unwrap();
+            let version_mat = match version_re.captures(res_body) {
+                Some(m) => m,
+                None => continue
+            };
+
+            response.version = version_mat["version"].to_string();
+
+            // Incomplete semver fix (e.g. 4.6 -> 4.6.0)
             let mut dots = 0;
-            let tmp_substring = res_body.bytes().skip(mat.end());
-            for (_i, c) in tmp_substring.enumerate() {
-                if c == b'"' { break; }
+            for c in response.version.bytes() {
                 if c == b'.' { dots += 1; }
-                response.version += (c as char).to_string().as_str();
             }
-            // semver fix (e.g. 4.6 -> 4.6.0)
             if dots < 2 {
                 response.version += ".0";
             }

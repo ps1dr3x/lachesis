@@ -12,12 +12,12 @@
             ]
         },
         "service": {
-            "regex": "(?m)<meta name=\"generator\" content=\"WordPress ",
+            "regex": "(?m)<meta name=\"generator\" content=\"WordPress (?-m)",
             "log": false
         },
         "versions": {
             "semver": {
-                "regex": "(?m)<meta name=\"generator\" content=\"WordPress ",
+                "regex": "(?m)(?:<meta name=\"generator\" content=\"WordPress )(?P<version>.*)(?:\")(?-m)",
                 "ranges": [
                     {
                         "from": "4.3.0",

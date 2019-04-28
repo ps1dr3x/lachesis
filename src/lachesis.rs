@@ -138,7 +138,7 @@ fn ui() -> Result<(), i32> {
 
     // Manage Web UI's messages
     loop {
-        let msg = match rx.recv() {
+        let msg = match rx.try_recv() {
             Ok(msg) => msg,
             Err(_err) => continue
         };
@@ -170,7 +170,7 @@ fn worker(conf: &LacConf) -> Result<(), i32> {
 
     // Manage worker's messages
     loop {
-        let msg = match rx.recv() {
+        let msg = match rx.try_recv() {
             Ok(msg) => msg,
             Err(_err) => continue
         };
