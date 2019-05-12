@@ -4,8 +4,13 @@ use std::{
         mpsc,
         Arc,
         Mutex
-    }     
+    },
+    time,
+    fs::File,
+    io::prelude::Write,
+    path::Path
 };
+
 use serde_derive::{
     Serialize,
     Deserialize
@@ -14,6 +19,12 @@ use ipnet::Ipv4AddrRange;
 use unindent::unindent;
 use colored::Colorize;
 use validator::Validate;
+use headless_chrome::{
+    browser,
+    Browser,
+    LaunchOptionsBuilder,
+    protocol::page::ScreenshotFormat
+};
 
 use crate::db::DbMan;
 use crate::worker::{
@@ -122,6 +133,54 @@ pub struct RegexVersion {
     pub description: String
 }
 
+fn maybe_take_screenshot(target: &Target, id: String) {
+    let target = target.clone();
+    thread::spawn(move || {
+        if target.protocol != "https"
+        && target.protocol != "http" {
+            return;
+        }
+
+        let browser_path = match browser::default_executable() {
+            Ok(path) => path,
+            Err(_e) => return
+        };
+
+        let browser_options = LaunchOptionsBuilder::default()
+            .path(Some(browser_path))
+            .build().unwrap();
+        let browser = Browser::new(browser_options).unwrap();
+        browser.wait_for_initial_tab().unwrap();
+        let tab = browser.new_tab().unwrap();
+
+        let host = format!(
+            "{}://{}:{}",
+            target.protocol,
+            if !target.domain.is_empty() {
+                target.domain
+            } else {
+                target.ip
+            },
+            target.port
+        );
+        match tab.navigate_to(&host) {
+            Ok(tab) => {
+                thread::sleep(time::Duration::from_secs(10));
+                let jpeg_data = tab.capture_screenshot(
+                    ScreenshotFormat::JPEG(Some(75)),
+                    None,
+                    true
+                ).unwrap();
+                let mut file = File::create(
+                    Path::new("data/screenshots/").join(&id)
+                ).unwrap();
+                file.write_all(&jpeg_data).unwrap();
+            },
+            Err(_e) => return
+        };
+    });
+}
+
 fn manage_worker_response(
     conf: &LacConf,
     stats: &mut Stats,
@@ -165,8 +224,8 @@ fn manage_worker_response(
                 res.description.green()).as_str())
             );
 
-            match dbm.save_service(&res) {
-                Ok(_) => (),
+            let id = match dbm.save_service(&res) {
+                Ok(id) => id.to_string(),
                 Err(err) => {
                     stats.log(format!(
                         "\n[{}] Error while saving a matching service in the embedded db: {}\n",
@@ -175,6 +234,8 @@ fn manage_worker_response(
                     return Err(1);
                 }
             };
+
+            maybe_take_screenshot(&target, id);
         }
     }
 

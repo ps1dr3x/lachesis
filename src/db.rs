@@ -55,20 +55,20 @@ impl DbMan {
         Ok(DbMan { conn })
     }
 
-    pub fn save_service(&self, service: &DetectorResponse) -> Result<usize, Error> {
-        self.conn.execute("
+    pub fn save_service(&self, service: &DetectorResponse) -> Result<i64, Error> {
+        self.conn.prepare("
             INSERT INTO services (service, version, description, protocol, ip, domain, port)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-            ", &[
-                &service.service,
-                &service.version,
-                &service.description,
-                &service.target.protocol,
-                &service.target.ip,
-                &service.target.domain,
-                &service.target.port as &ToSql
-            ]
-        )
+            "
+        )?.insert(&[
+            &service.service,
+            &service.version,
+            &service.description,
+            &service.target.protocol,
+            &service.target.ip,
+            &service.target.domain,
+            &service.target.port as &ToSql
+        ])
     }
 
     pub fn get_paginated_services(&self, offset: u32, rows: u32) -> Result<PaginatedServices, Error> {
