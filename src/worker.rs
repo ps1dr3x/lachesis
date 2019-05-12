@@ -57,7 +57,7 @@ pub struct Target {
 }
 
 impl Target {
-    fn default() -> Target {
+    pub fn default() -> Target {
         Target {
             domain: String::new(),
             ip: String::new(),

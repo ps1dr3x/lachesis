@@ -4,7 +4,7 @@ use std::{
         mpsc,
         Arc,
         Mutex
-    }
+    }     
 };
 use serde_derive::{
     Serialize,
@@ -14,10 +14,12 @@ use ipnet::Ipv4AddrRange;
 use unindent::unindent;
 use colored::Colorize;
 use validator::Validate;
+
 use crate::db::DbMan;
 use crate::worker::{
     self,
-    WorkerMessage
+    WorkerMessage,
+    Target
 };
 use crate::detector;
 use crate::stats::Stats;
@@ -32,6 +34,7 @@ use crate::web::{
     self,
     UIMessage
 };
+use crate::utils::format_host;
 
 #[derive(Clone, Debug, Validate)]
 pub struct LacConf {
@@ -119,31 +122,65 @@ pub struct RegexVersion {
     pub description: String
 }
 
-pub fn run(conf: &LacConf) -> Result<(), i32> {
-    if conf.web_ui {
-        ui()
-    } else {
-        worker(conf)
+fn manage_worker_response(
+    conf: &LacConf,
+    stats: &mut Stats,
+    dbm: &DbMan,
+    target: Target
+) -> Result<(), i32> {
+    stats.log(format!(
+        "[{}][{}:{}] Received a response. Length: {}",
+        target.protocol.blue(),
+        format_host(&target).cyan(),
+        target.port.to_string().cyan(),
+        target.response.len().to_string().cyan()
+    ));
+
+    let responses = detector::detect(
+        &target,
+        &conf.definitions
+    );
+
+    let mut matching = false;
+    if !responses.is_empty() {
+        for res in responses {
+            if let Some(error) = res.error {
+                stats.log(error);
+                continue;
+            }
+
+            matching = true;
+
+            stats.log(unindent(format!("
+                ===
+                Matching service found: {}
+                Service: {}
+                Version: {}
+                Description: {}
+                ===
+            ",
+                format_host(&res.target).green(),
+                res.service.green(),
+                res.version.green(),
+                res.description.green()).as_str())
+            );
+
+            match dbm.save_service(&res) {
+                Ok(_) => (),
+                Err(err) => {
+                    stats.log(format!(
+                        "\n[{}] Error while saving a matching service in the embedded db: {}\n",
+                        "ERROR".red(), err
+                    ));
+                    return Err(1);
+                }
+            };
+        }
     }
-}
 
-fn ui() -> Result<(), i32> {
-    // Initialize the communication channel
-    let (tx, rx): (mpsc::Sender<UIMessage>, mpsc::Receiver<UIMessage>) = mpsc::channel();
+    stats.increment(&target.protocol, matching);
 
-    // Run the Web UI
-    thread::spawn(move || {
-        web::run(tx);
-    });
-
-    // Manage Web UI's messages
-    loop {
-        let msg = match rx.recv() {
-            Ok(msg) => msg,
-            Err(_err) => continue
-        };
-        println!("{}", msg.message);
-    }
+    Ok(())
 }
 
 fn worker(conf: &LacConf) -> Result<(), i32> {
@@ -184,67 +221,10 @@ fn worker(conf: &LacConf) -> Result<(), i32> {
                 break;
             },
             WorkerMessage::Response(target) => {
-                let host = if !target.domain.is_empty() {
-                    target.domain.clone()
-                } else {
-                    target.ip.clone()
-                };
-
-                stats.log(format!(
-                    "[{}][{}:{}] Received a response. Length: {}",
-                    target.protocol.blue(),
-                    host.cyan(),
-                    target.port.to_string().cyan(),
-                    target.response.len().to_string().cyan()
-                ));
-
-                let responses = detector::detect(
-                    &target.protocol,
-                    &host,
-                    target.port,
-                    &target.response,
-                    &conf.definitions
-                );
-
-                let mut matching = false;
-                if !responses.is_empty() {
-                    for res in responses {
-                        if let Some(error) = res.error {
-                            stats.log(error);
-                            continue;
-                        }
-
-                        stats.log(unindent(format!("
-
-                            ===
-                            Matching service found: {}
-                            Service: {}
-                            Version: {}
-                            Description: {}
-                            ===
-
-                        ",
-                            res.host.green(),
-                            res.service.green(),
-                            res.version.green(),
-                            res.description.green()).as_str())
-                        );
-
-                        match dbm.save_service(&res) {
-                            Ok(_) => (),
-                            Err(err) => {
-                                stats.log(format!(
-                                    "\n[{}] Error while saving a matching service in the embedded db: {}\n",
-                                    "ERROR".red(), err
-                                ));
-                                return Err(1);
-                            }
-                        };
-                        matching = true;
-                    }
+                match manage_worker_response(conf, &mut stats, &dbm, target) {
+                    Ok(()) => (),
+                    Err(code) => return Err(code)
                 }
-
-                stats.increment(&target.protocol, matching);
             },
             WorkerMessage::NextTarget => {
                 stats.increment_targets();
@@ -262,4 +242,31 @@ fn worker(conf: &LacConf) -> Result<(), i32> {
 
     stats.finish();
     Ok(())
+}
+
+fn ui() -> Result<(), i32> {
+    // Initialize the communication channel
+    let (tx, rx): (mpsc::Sender<UIMessage>, mpsc::Receiver<UIMessage>) = mpsc::channel();
+
+    // Run the Web UI
+    thread::spawn(move || {
+        web::run(tx);
+    });
+
+    // Manage Web UI's messages
+    loop {
+        let msg = match rx.recv() {
+            Ok(msg) => msg,
+            Err(_err) => continue
+        };
+        println!("{}", msg.message);
+    }
+}
+
+pub fn run(conf: &LacConf) -> Result<(), i32> {
+    if conf.web_ui {
+        ui()
+    } else {
+        worker(conf)
+    }
 }

@@ -29,8 +29,8 @@ cp target/release/lachesis dist/lachesis-$VERSION
 # Copy bin file and resources into the dist dir
 cp -R resources dist/lachesis-$VERSION
 
-# Create the db directory
-mkdir dist/lachesis-$VERSION/db
+# Copy the data directory
+cp -r data/ dist/lachesis-$VERSION/data
 
 # Notify success
 printf "\nBuild succeeded: dist/lachesis-$VERSION\n\n"

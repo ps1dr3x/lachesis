@@ -9,14 +9,17 @@ use std::{
     },
     path::Path
 };
+
 use serde_json;
 use ipnet::Ipv4Net;
 use validator::Validate;
 use clap::App;
+
 use crate::lachesis::{
     LacConf,
     Definition
 };
+use crate::worker::Target;
 
 pub fn get_conf() -> Result<LacConf, &'static str> {
     // Get cli parameters according to the definition file
@@ -186,4 +189,12 @@ pub fn parse_validate_definitions(paths: &[String]) -> Result<Vec<Definition>, S
     }
 
     Ok(definitions)
+}
+
+pub fn format_host(target: &Target) -> String {
+    if !target.domain.is_empty() {
+        format!("{} -> {}", target.ip, target.domain)
+    } else {
+        target.ip.clone()
+    }
 }

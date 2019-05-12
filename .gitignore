@@ -3,8 +3,10 @@
 **/*.rs.bk
 logs/*
 !logs/.gitkeep
-db/*
-!db/.gitkeep
+data/db/*
+!data/db/.gitkeep
+data/screenshots/*
+!data/screenshots/.gitkeep
 dist/*
 !dist/.gitkeep
 resources/ui/*

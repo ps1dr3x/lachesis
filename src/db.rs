@@ -14,12 +14,13 @@ use crate::detector::DetectorResponse;
 #[derive(Serialize, Deserialize, Debug)]
 struct ServicesRow {
     pub id: u32,
-    pub time_created: String,
+    pub first_seen: String,
     pub service: String,
     pub version: String,
     pub description: String,
     pub protocol: String,
-    pub host: String,
+    pub ip: String,
+    pub domain: String,
     pub port: u16
 }
 
@@ -35,17 +36,18 @@ pub struct DbMan {
 
 impl DbMan {
     pub fn init() -> Result<Self, Error> {
-        let conn = Connection::open(Path::new("db/service"))?;
+        let conn = Connection::open(Path::new("data/db/services"))?;
 
         conn.execute("
             CREATE TABLE IF NOT EXISTS services (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                time_created    DATETIME DEFAULT CURRENT_TIMESTAMP,
+                first_seen      DATETIME DEFAULT CURRENT_TIMESTAMP,
                 service         TEXT,
                 version         TEXT,
                 description     TEXT NOT NULL,
                 protocol        TEXT NOT NULL,
-                host            TEXT NOT NULL,
+                ip              TEXT NOT NULL,
+                domain          TEXT NOT NULL,
                 port            INTEGER NOT NULL
             )
         ", NO_PARAMS)?;
@@ -55,15 +57,16 @@ impl DbMan {
 
     pub fn save_service(&self, service: &DetectorResponse) -> Result<usize, Error> {
         self.conn.execute("
-            INSERT INTO services (service, version, description, protocol, host, port)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            INSERT INTO services (service, version, description, protocol, ip, domain, port)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
             ", &[
                 &service.service,
                 &service.version,
                 &service.description,
-                &service.protocol,
-                &service.host,
-                &service.port as &ToSql
+                &service.target.protocol,
+                &service.target.ip,
+                &service.target.domain,
+                &service.target.port as &ToSql
             ]
         )
     }
@@ -83,13 +86,14 @@ impl DbMan {
         ], |row| {
             Ok(ServicesRow {
                 id: row.get(0)?,
-                time_created: row.get(1)?,
+                first_seen: row.get(1)?,
                 service: row.get(2)?,
                 version: row.get(3)?,
                 description: row.get(4)?,
                 protocol: row.get(5)?,
-                host: row.get(6)?,
-                port: row.get(7)?
+                ip: row.get(6)?,
+                domain: row.get(7)?,
+                port: row.get(8)?
             })
         })?;
 

@@ -1,61 +1,51 @@
 use regex::Regex;
 use semver::Version;
 use colored::Colorize;
+
 use crate::lachesis::Definition;
+use crate::worker::Target;
+use crate::utils::format_host;
 
 #[derive(Clone, Debug)]
 pub struct DetectorResponse {
+    pub target: Target,
     pub service: String,
     pub version: String,
     pub description: String,
-    pub protocol: String,
-    pub host: String,
-    pub port: u16,
     pub error: Option<String>
 }
 
 impl DetectorResponse {
     fn default() -> DetectorResponse {
         DetectorResponse {
+            target: Target::default(),
             service: String::new(),
             version: String::new(),
             description: String::new(),
-            protocol: String::new(),
-            host: String::new(),
-            port: 0,
             error: None
         }
     }
 
-    fn new(protocol: String, host: String, port: u16) -> Self {
+    fn new(target: Target) -> Self {
         DetectorResponse {
-            protocol,
-            host,
-            port,
+            target,
             ..DetectorResponse::default()
         }
     }
 }
 
 pub fn detect(
-        protocol: &str,
-        host: &str,
-        port: u16,
-        res_body: &str,
+        target: &Target,
         definitions: &[Definition]
     ) -> Vec<DetectorResponse> {
 
     let mut matching = Vec::new();
 
     for def in definitions {
-        let mut response = DetectorResponse::new(
-            String::from(protocol),
-            String::from(host),
-            port
-        );
+        let mut response = DetectorResponse::new(target.clone());
 
         let service_re = Regex::new(def.service.regex.as_str()).unwrap();
-        match service_re.find(res_body) {
+        match service_re.find(&target.response) {
             Some(m) => m,
             None => continue
         };
@@ -72,7 +62,7 @@ pub fn detect(
 
         if let Some(semver) = versions.semver {
             let version_re = Regex::new(semver.regex.as_str()).unwrap();
-            let version_mat = match version_re.captures(res_body) {
+            let version_mat = match version_re.captures(&target.response) {
                 Some(m) => m,
                 None => continue
             };
@@ -93,7 +83,10 @@ pub fn detect(
                 Err(_err) => {
                     response.error = Some(format!(
                         "[{}][{}:{}] - Unknown or invalid semver: {}",
-                        "WARN".yellow(), host, port, response.version
+                        "WARN".yellow(),
+                        format_host(&response.target).cyan(),
+                        target.port.to_string().cyan(),
+                        response.version
                     ));
                     matching.push(response.clone());
                     continue;
@@ -113,7 +106,7 @@ pub fn detect(
             for ver in regex {
                 let re = Regex::new(ver.regex.as_str()).unwrap();
 
-                if let Some(_mat) = re.find(res_body) {
+                if let Some(_mat) = re.find(&target.response) {
                     response.version = ver.version;
                     response.description = ver.description;
                     matching.push(response.clone());
