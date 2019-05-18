@@ -86,7 +86,7 @@ impl Stats {
 
     pub fn log_info(&mut self, message: String) {
         self.progress_bar.println(format!(
-            "\n[{}] {}\n",
+            "[{}] {}",
             "INFO".yellow(),
             message
         ));
@@ -94,7 +94,7 @@ impl Stats {
 
     pub fn log_err(&mut self, message: String) {
         self.progress_bar.println(format!(
-            "\n[{}] {}\n",
+            "[{}] {}",
             "ERROR".red(),
             message
         ));
