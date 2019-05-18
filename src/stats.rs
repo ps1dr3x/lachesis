@@ -4,8 +4,10 @@ use indicatif::{
 };
 use colored::Colorize;
 
+use crate::detector::DetectorResponse;
+use crate::utils;
+
 pub struct Stats {
-    debug: bool,
     progress_bar: ProgressBar,
     max_targets: usize,
     targets: usize,
@@ -17,7 +19,7 @@ pub struct Stats {
 }
 
 impl Stats {
-    pub fn new(max_targets: usize, debug: bool) -> Self {
+    pub fn new(max_targets: usize) -> Self {
         let pb = if max_targets != 0 {
             let pb = ProgressBar::new(max_targets as u64);
             pb.set_style(ProgressStyle::default_bar()
@@ -33,7 +35,6 @@ impl Stats {
         };
 
         Stats {
-            debug,
             progress_bar: pb,
             targets: 0,
             max_targets,
@@ -83,21 +84,37 @@ impl Stats {
         );
     }
 
-    pub fn log(&mut self, message: String) {
-        self.progress_bar.println(message);
+    pub fn log_info(&mut self, message: String) {
+        self.progress_bar.println(format!(
+            "\n[{}] {}\n",
+            "INFO".yellow(),
+            message
+        ));
     }
 
-    pub fn log_debug(&mut self, message: String) {
-        if self.debug {
-            self.progress_bar.println(message);
-        }
+    pub fn log_err(&mut self, message: String) {
+        self.progress_bar.println(format!(
+            "\n[{}] {}\n",
+            "ERROR".red(),
+            message
+        ));
+    }
+
+    pub fn log_match(&mut self, dr: &DetectorResponse) {
+        self.progress_bar.println(format!(
+            "[{}][{}] service: {} version: {} description: {}",
+            "MATCH".green(),
+            utils::format_host(&dr.target).green(),
+            dr.service.green(),
+            dr.version.green(),
+            dr.description.green()
+        ));
     }
 
     pub fn finish(&mut self) {
         if self.max_targets != 0 && self.targets < self.max_targets {
-            self.progress_bar.println(format!(
-                "[{}] All the targets have been consumed before reaching the specified max-targets number",
-                "INFO".yellow()
+            self.log_info(format!(
+                "All the targets have been consumed before reaching the specified max-targets number"
             ));
         }
         self.progress_bar.finish();

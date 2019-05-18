@@ -3,7 +3,12 @@ use std::{
     sync::{
         mpsc,
         Arc,
-        Mutex
+        Mutex,
+        mpsc::{
+            Sender,
+            Receiver,
+            channel
+        }
     },
     time,
     fs::File,
@@ -16,7 +21,6 @@ use serde_derive::{
     Deserialize
 };
 use ipnet::Ipv4AddrRange;
-use unindent::unindent;
 use colored::Colorize;
 use validator::Validate;
 use headless_chrome::{
@@ -148,8 +152,12 @@ fn maybe_take_screenshot(target: &Target, id: String) {
 
         let browser_options = LaunchOptionsBuilder::default()
             .path(Some(browser_path))
-            .build().unwrap();
-        let browser = Browser::new(browser_options).unwrap();
+            .build()
+            .unwrap();
+        let browser = match Browser::new(browser_options) {
+            Ok(b) => b,
+            Err(_e) => return
+        };
         browser.wait_for_initial_tab().unwrap();
         let tab = browser.new_tab().unwrap();
 
@@ -172,7 +180,7 @@ fn maybe_take_screenshot(target: &Target, id: String) {
                     true
                 ).unwrap();
                 let mut file = File::create(
-                    Path::new("data/screenshots/").join(&id)
+                    Path::new("data/screenshots/").join(&(id + ".jpg"))
                 ).unwrap();
                 file.write_all(&jpeg_data).unwrap();
             },
@@ -181,13 +189,13 @@ fn maybe_take_screenshot(target: &Target, id: String) {
     });
 }
 
-fn manage_worker_response(
+fn handle_worker_response(
     conf: &LacConf,
     stats: &mut Stats,
     dbm: &DbMan,
     target: Target
 ) -> Result<(), i32> {
-    stats.log(format!(
+    stats.log_info(format!(
         "[{}][{}:{}] Received a response. Length: {}",
         target.protocol.blue(),
         format_host(&target).cyan(),
@@ -204,32 +212,20 @@ fn manage_worker_response(
     if !responses.is_empty() {
         for res in responses {
             if let Some(error) = res.error {
-                stats.log(error);
+                stats.log_err(error);
                 continue;
             }
 
             matching = true;
 
-            stats.log(unindent(format!("
-                ===
-                Matching service found: {}
-                Service: {}
-                Version: {}
-                Description: {}
-                ===
-            ",
-                format_host(&res.target).green(),
-                res.service.green(),
-                res.version.green(),
-                res.description.green()).as_str())
-            );
+            stats.log_match(&res);
 
             let id = match dbm.save_service(&res) {
                 Ok(id) => id.to_string(),
                 Err(err) => {
-                    stats.log(format!(
-                        "\n[{}] Error while saving a matching service in the embedded db: {}\n",
-                        "ERROR".red(), err
+                    stats.log_err(format!(
+                        "Error while saving a matching service in the embedded db: {}",
+                        err
                     ));
                     return Err(1);
                 }
@@ -244,29 +240,25 @@ fn manage_worker_response(
     Ok(())
 }
 
-fn worker(conf: &LacConf) -> Result<(), i32> {
-    // Initialize the stats/logs manager
-    let mut stats = Stats::new(conf.max_targets, conf.debug);
+fn run_worker(conf: &LacConf) -> Result<(), i32> {
+    let mut stats = Stats::new(conf.max_targets);
 
-    // Initialize the embedded db manager
     let dbm = match DbMan::init() {
         Ok(dbm) => dbm,
         Err(err) => {
-            stats.log(format!("\n[ERROR] Db initialization error: {}\n", err));
+            stats.log_err(format!("Db initialization error: {}", err));
             return Err(1);
         }
     };
 
-    // Initialize the communication channel
-    let (tx, rx): (mpsc::Sender<WorkerMessage>, mpsc::Receiver<WorkerMessage>) = mpsc::channel();
+    let (tx, rx): (
+        Sender<WorkerMessage>,
+        Receiver<WorkerMessage>
+    ) = mpsc::channel();
 
-    // Run the Worker
     let inner_conf = conf.clone();
-    let thread = thread::spawn(move || {
-        worker::run(&tx, inner_conf);
-    });
+    let thread = thread::spawn(move || worker::run(&tx, inner_conf));
 
-    // Manage worker's messages
     loop {
         let msg = match rx.recv() {
             Ok(msg) => msg,
@@ -274,30 +266,31 @@ fn worker(conf: &LacConf) -> Result<(), i32> {
         };
 
         match msg {
-            WorkerMessage::Log(msg) => {
-                stats.log_debug(msg);
+            WorkerMessage::LogInfo(msg) => {
+                if !conf.debug { continue; }
+                stats.log_info(msg);
                 continue;
             },
-            WorkerMessage::Shutdown => {
-                break;
+            WorkerMessage::LogErr(msg) => {
+                if !conf.debug { continue; }
+                stats.log_err(msg);
+                continue;
             },
+            WorkerMessage::Shutdown => break,
             WorkerMessage::Response(target) => {
-                match manage_worker_response(conf, &mut stats, &dbm, target) {
+                match handle_worker_response(conf, &mut stats, &dbm, target) {
                     Ok(()) => (),
                     Err(code) => return Err(code)
                 }
             },
-            WorkerMessage::NextTarget => {
-                stats.increment_targets();
-            }
+            WorkerMessage::NextTarget => stats.increment_targets()
         };
     }
 
-    // Join the worker's thread
     thread.join().unwrap_or_else(|err| {
-        stats.log(format!(
-            "\n[{}] The thread being joined has panicked: {:?}\n",
-            "ERROR".red(), err
+        stats.log_err(format!(
+            "The thread being joined has panicked: {:?}",
+            err
         ))
     });
 
@@ -305,16 +298,14 @@ fn worker(conf: &LacConf) -> Result<(), i32> {
     Ok(())
 }
 
-fn ui() -> Result<(), i32> {
-    // Initialize the communication channel
-    let (tx, rx): (mpsc::Sender<UIMessage>, mpsc::Receiver<UIMessage>) = mpsc::channel();
+fn run_ui() -> Result<(), i32> {
+    let (tx, rx): (
+        Sender<UIMessage>,
+        Receiver<UIMessage>
+    ) = channel();
 
-    // Run the Web UI
-    thread::spawn(move || {
-        web::run(tx);
-    });
+    thread::spawn(move || web::run(tx));
 
-    // Manage Web UI's messages
     loop {
         let msg = match rx.recv() {
             Ok(msg) => msg,
@@ -326,8 +317,8 @@ fn ui() -> Result<(), i32> {
 
 pub fn run(conf: &LacConf) -> Result<(), i32> {
     if conf.web_ui {
-        ui()
+        run_ui()
     } else {
-        worker(conf)
+        run_worker(conf)
     }
 }

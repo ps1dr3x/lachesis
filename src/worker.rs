@@ -79,7 +79,8 @@ impl Target {
 #[derive(Debug, Clone)]
 pub enum WorkerMessage {
     Response(Target),
-    Log(String),
+    LogInfo(String),
+    LogErr(String),
     NextTarget,
     Shutdown
 }
@@ -149,10 +150,10 @@ pub fn run(tx: &mpsc::Sender<WorkerMessage>, conf: LacConf) {
                     }
                     _ => {
                         in_tx.send(
-                            WorkerMessage::Log(
+                            WorkerMessage::LogErr(
                                 format!(
-                                    "\n[{}] Skipping unknown protocol: {}\n",
-                                    "ERROR".red(), def.protocol
+                                    "Skipping unknown protocol: {}",
+                                    def.protocol
                                 )
                             )
                         ).unwrap();
@@ -190,10 +191,9 @@ fn http_s(
         Ok(https) => https,
         Err(err) => {
             thread_tx.send(
-                WorkerMessage::Log(
+                WorkerMessage::LogErr(
                     format!(
-                        "[{}] TLS initialization failed. Error: {}",
-                        "ERROR".red(),
+                        "TLS initialization failed. Error: {}",
                         err
                     )
                 )
@@ -266,10 +266,9 @@ fn http_s(
                 })
                 .map_err(move |err| {
                     thread_tx_err.send(
-                        WorkerMessage::Log(
+                        WorkerMessage::LogInfo(
                             format!(
-                                "[{}][{}][{}:{}] - Target not available. Error: {}",
-                                "INFO".yellow(),
+                                "[{}][{}:{}] - Target not available. Error: {}",
                                 target_err.protocol.to_uppercase().blue(),
                                 target_err.domain.cyan(),
                                 target_err.port.to_string().cyan(),
@@ -282,10 +281,9 @@ fn http_s(
             let req_timeout = Timeout::new(req_fut, Duration::from_secs(5))
                 .map_err(move |_err| {
                     thread_tx_timeout.send(
-                        WorkerMessage::Log(
+                        WorkerMessage::LogInfo(
                             format!(
-                                "[{}][{}][{}:{}] - Timeout reached",
-                                "INFO".yellow(),
+                                "[{}][{}:{}] - Timeout reached",
                                 target_timeout.protocol.to_uppercase().blue(),
                                 target_timeout.domain.cyan(),
                                 target_timeout.port.to_string().cyan()
@@ -309,10 +307,9 @@ fn tcp_custom(
             Ok(addr) => addr,
             Err(_err) => {
                 thread_tx.send(
-                    WorkerMessage::Log(
+                    WorkerMessage::LogErr(
                         format!(
-                            "\n[{}] - Invalid address: {}\n",
-                            "ERROR".red(),
+                            "Invalid address: {}",
                             format!("{}:{}", host, port).cyan()
                         )
                     )
@@ -335,10 +332,9 @@ fn tcp_custom(
         let req_fut = TcpStream::connect(&addr)
             .map_err(move |err| {
                 tx_fut_conn_err.send(
-                    WorkerMessage::Log(
+                    WorkerMessage::LogInfo(
                         format!(
-                            "[{}][{}:{}] - TCP stream connection error: {}",
-                            "INFO".yellow(),
+                            "[{}:{}] - TCP stream connection error: {}",
                             host_fut_conn_err.cyan(),
                             port.to_string().cyan(),
                             err
@@ -350,10 +346,9 @@ fn tcp_custom(
             .and_then(|stream| io::write_all(stream, message))
             .map_err(move |err| {
                 tx_fut_write_err.send(
-                    WorkerMessage::Log(
+                    WorkerMessage::LogInfo(
                         format!(
-                            "[{}][{}:{}] - TCP stream write error: {}",
-                            "INFO".yellow(),
+                            "[{}:{}] - TCP stream write error: {}",
                             host_fut_write_err.cyan(),
                             port.to_string().cyan(),
                             err
@@ -368,10 +363,9 @@ fn tcp_custom(
             })
             .map_err(move |err| {
                 tx_fut_read_err.send(
-                    WorkerMessage::Log(
+                    WorkerMessage::LogInfo(
                         format!(
-                            "[{}][{}:{}] - TCP stream read error: {}",
-                            "INFO".yellow(),
+                            "[{}:{}] - TCP stream read error: {}",
                             host_fut_read_err.cyan(),
                             port.to_string().cyan(),
                             err
@@ -393,10 +387,9 @@ fn tcp_custom(
             })
             .map_err(move |err| {
                 tx_fut_err.send(
-                    WorkerMessage::Log(
+                    WorkerMessage::LogInfo(
                         format!(
-                            "[{}][{}:{}] - TCP error: {}",
-                            "INFO".yellow(),
+                            "[{}:{}] - TCP error: {}",
                             host_fut_err.cyan(),
                             port.to_string().cyan(),
                             err
@@ -410,10 +403,9 @@ fn tcp_custom(
         let req_timeout = Timeout::new(req_fut, Duration::from_secs(5))
             .map_err(move |_err| {
                 thread_tx_timeout.send(
-                    WorkerMessage::Log(
+                    WorkerMessage::LogInfo(
                         format!(
-                            "[{}][{}][{}:{}] - Timeout reached",
-                            "INFO".yellow(),
+                            "[{}][{}:{}] - Timeout reached",
                             "tcp/custom".blue(),
                             timeout_host.cyan(),
                             port.to_string().cyan(),
