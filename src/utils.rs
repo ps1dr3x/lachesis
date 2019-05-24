@@ -46,7 +46,7 @@ pub fn get_conf() -> Result<LacConf, &'static str> {
 
     // If a value for --max-targets/-m is specified, check that it's a valid number
     let max_targets = if matches.is_present("max_targets") {
-        match value_t!(matches, "max_targets", usize) {
+        match value_t!(matches, "max_targets", u64) {
             Ok(n) => n,
             Err(_e) => {
                 return Err("Invalid value for parameter --max-targets/-m (not a valid number)");
@@ -120,18 +120,18 @@ pub fn get_conf() -> Result<LacConf, &'static str> {
     // Parse subnets (if specified)
     let subnets = match matches.values_of("subnet") {
         Some(subnets) => {
-            let sn = Arc::new(Mutex::new((Vec::new(), 0)));
+            let mut sn = Vec::new();
 
             for subnet in subnets {
                 match subnet.parse::<Ipv4Net>() {
                     Ok(net) => {
-                        sn.lock().unwrap().0.push(net.hosts());
+                        sn.push(net.hosts());
                     },
-                    Err(_err) => return Err("Invalid value for parameter --subnet")
+                    Err(_) => return Err("Invalid value for parameter --subnet")
                 }
             }
 
-            sn
+            Arc::new(Mutex::new((sn, 0)))
         },
         None => {
             Arc::new(Mutex::new((Vec::new(), 0)))

@@ -58,7 +58,7 @@ pub struct LacConf {
     pub dataset: String,
     pub subnets: Arc<Mutex<(Vec<Ipv4AddrRange>, usize)>>,
     pub user_agent: String,
-    pub max_targets: usize,
+    pub max_targets: u64,
     pub debug: bool,
     pub web_ui: bool
 }
@@ -256,13 +256,13 @@ fn run_worker(conf: &LacConf) -> Result<(), i32> {
         Receiver<WorkerMessage>
     ) = mpsc::channel();
 
-    let inner_conf = conf.clone();
-    let thread = thread::spawn(move || worker::run(&tx, inner_conf));
+    let in_conf = conf.clone();
+    let thread = thread::spawn(move || worker::run(&tx, in_conf));
 
     loop {
         let msg = match rx.recv() {
             Ok(msg) => msg,
-            Err(_err) => continue
+            Err(_) => continue
         };
 
         match msg {
@@ -272,7 +272,6 @@ fn run_worker(conf: &LacConf) -> Result<(), i32> {
                 continue;
             },
             WorkerMessage::LogErr(msg) => {
-                if !conf.debug { continue; }
                 stats.log_err(msg);
                 continue;
             },

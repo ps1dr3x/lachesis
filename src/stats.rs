@@ -9,17 +9,17 @@ use crate::utils;
 
 pub struct Stats {
     progress_bar: ProgressBar,
-    max_targets: usize,
-    targets: usize,
-    requests_https: usize,
-    requests_http: usize,
-    requests_tcp_custom: usize,
-    total_requests: usize,
-    services_found: usize
+    max_targets: u64,
+    targets: u64,
+    requests_https: u64,
+    requests_http: u64,
+    requests_tcp_custom: u64,
+    total_requests: u64,
+    services_found: u64
 }
 
 impl Stats {
-    pub fn new(max_targets: usize) -> Self {
+    pub fn new(max_targets: u64) -> Self {
         let pb = if max_targets != 0 {
             let pb = ProgressBar::new(max_targets as u64);
             pb.set_style(ProgressStyle::default_bar()
