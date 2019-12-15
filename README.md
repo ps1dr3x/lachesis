@@ -83,7 +83,6 @@ OPTIONS:
 If you don't intend to work on the Web UI (front end) part, you can do this only once. If you don't intend to use the Web UI, this can be skipped.
 
 ```bash
-cd src/ui
 npm install
 npm run build # or npm run watch
 ```
