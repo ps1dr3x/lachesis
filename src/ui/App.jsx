@@ -7,7 +7,7 @@ import Header from './components/Header'
 import DataTable from './components/DataTable'
 import Footer from './components/Footer'
 import 'semantic-ui-css/semantic.min.css'
-import 'style/app.scss'
+import './style/app.scss'
 
 const panes = [
   {

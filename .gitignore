@@ -1,6 +1,7 @@
 
 /target
 **/*.rs.bk
+node_modules
 logs/*
 !logs/.gitkeep
 data/db/*

@@ -13,7 +13,7 @@ import {
   Dropdown
 } from 'semantic-ui-react'
 import uuid from 'uuid/v4'
-import 'style/data-table.scss'
+import '../style/data-table.scss'
 
 /* global fetch */
 
