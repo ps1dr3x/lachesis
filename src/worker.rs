@@ -260,7 +260,7 @@ async fn tcp_custom(
 async fn run_async(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
     let mut target_n = 0;
     let mut http = HttpConnector::new();
-    http.set_connect_timeout(Some(Duration::from_secs(1)));
+    http.set_connect_timeout(Some(Duration::from_secs(5)));
     http.set_happy_eyeballs_timeout(Some(Duration::from_secs(1)));
     http.enforce_http(false);
     let connector = native_tls::TlsConnector::builder()
