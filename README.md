@@ -10,11 +10,11 @@ This project was born as a simple test of the Rust's networking (and asynchronou
 |  ,-. ,-. |-. ,-. ,-. . ,-. 
 |  ,-| |   | | |-' `-. | `-. 
 `' `-^ `-' ' ' `-' `-' ' `-'
-                      v0.1.0
+                      v0.2.0
 -------------8<-------------
 
 
-Lachesis v0.1.0
+Lachesis v0.2.0
 Michele Federici (@ps1dr3x) <michele@federici.tech>
 
 USAGE:
@@ -55,7 +55,7 @@ OPTIONS:
                                     
     -S, --subnet <SUBNET>...       Scan one or more subnets
                                     
-    -u, --user-agent <STRING>      Sets a custom user agent (http/https) [default: lachesis/0.1.0]
+    -u, --user-agent <STRING>      Sets a custom user agent (http/https) [default: lachesis/0.2.0]
 ```
 
 ## Roadmap / TODOs
