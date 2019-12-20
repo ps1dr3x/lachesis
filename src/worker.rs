@@ -181,15 +181,20 @@ async fn tcp_custom(
     target: Target,
     options: Options
 ) {
-    for port in options.ports {
-        let host = target.ip.clone();
-        let addr = match format!("{}:{}", host, port).parse::<SocketAddr>() {
+    for port in &options.ports {
+        let mut target = target.clone();
+        target.domain = String::new();
+        target.protocol = "tcp/custom".to_string();
+        target.port = *port;
+
+        let addr = match format!("{}:{}", target.ip, target.port).parse::<SocketAddr>() {
             Ok(addr) => addr,
             Err(_e) => {
                 tx.send(LogErr(
                     format!(
-                        "Invalid address: {}",
-                        format!("{}:{}", host, port).cyan()
+                        "[{}] Invalid address: {}:{}",
+                        target.protocol.to_uppercase().blue(),
+                        target.ip.cyan(), port.to_string().cyan()
                     )
                 )).unwrap();
                 continue;
@@ -201,10 +206,10 @@ async fn tcp_custom(
             Err(e) => {
                 tx.send(LogInfo(
                     format!(
-                        "[{}:{}] - TCP stream connection error: {}",
-                        host.cyan(),
-                        port.to_string().cyan(),
-                        e
+                        "[{}][{}:{}] - TCP stream connection error: {}",
+                        target.protocol.to_uppercase().blue(),
+                        target.ip.cyan(),
+                        target.port.to_string().cyan(), e
                     )
                 )).unwrap();
                 continue;
@@ -217,10 +222,10 @@ async fn tcp_custom(
             Err(e) => {
                 tx.send(LogInfo(
                     format!(
-                        "[{}:{}] - TCP stream write error: {}",
-                        host.cyan(),
-                        port.to_string().cyan(),
-                        e
+                        "[{}][{}:{}] - TCP stream write error: {}",
+                        target.protocol.to_uppercase().blue(),
+                        target.ip.cyan(),
+                        target.port.to_string().cyan(), e
                     )
                 )).unwrap();
                 continue;
@@ -234,10 +239,10 @@ async fn tcp_custom(
             Err(e) => {
                 tx.send(LogInfo(
                     format!(
-                        "[{}:{}] - TCP stream read error: {}",
-                        host.cyan(),
-                        port.to_string().cyan(),
-                        e
+                        "[{}][{}:{}] - TCP stream read error: {}",
+                        target.protocol.to_uppercase().blue(),
+                        target.ip.cyan(),
+                        target.port.to_string().cyan(), e
                     )
                 )).unwrap();
                 continue;
@@ -245,13 +250,7 @@ async fn tcp_custom(
         };
 
         if !answer.is_empty() {
-            let target = Target {
-                domain: String::new(),
-                ip: host,
-                port,
-                protocol: "tcp/custom".to_string(),
-                response: String::from_utf8_lossy(&answer).to_string()
-            };
+            target.response = String::from_utf8_lossy(&answer).to_string();
             tx.send(Response(target)).unwrap();
         }
     }
@@ -333,14 +332,7 @@ async fn run_async(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
                         ).await;
                     });
                 }
-                _ => {
-                    tx.send(LogErr(
-                        format!(
-                            "Skipping unknown protocol: {}",
-                            def.protocol
-                        )
-                    )).unwrap();
-                }
+                _ => ()
             }
         }
         if http_s_ports.len() > 0 {
