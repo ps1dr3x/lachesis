@@ -197,7 +197,7 @@ fn handle_worker_response(
 ) -> Result<(), i32> {
     stats.log_info(format!(
         "[{}][{}:{}] Received a response. Length: {}",
-        target.protocol.blue(),
+        target.protocol.to_uppercase().blue(),
         format_host(&target).cyan(),
         target.port.to_string().cyan(),
         target.response.len().to_string().cyan()
