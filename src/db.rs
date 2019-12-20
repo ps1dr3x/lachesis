@@ -67,7 +67,7 @@ impl DbMan {
             &service.target.protocol,
             &service.target.ip,
             &service.target.domain,
-            &service.target.port as &ToSql
+            &service.target.port as &dyn ToSql
         ])
     }
 
