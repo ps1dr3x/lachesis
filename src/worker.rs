@@ -262,7 +262,10 @@ async fn run_async(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
     let mut http = HttpConnector::new();
     http.set_connect_timeout(Some(Duration::from_secs(1)));
     http.set_happy_eyeballs_timeout(Some(Duration::from_secs(1)));
-    let connector = native_tls::TlsConnector::builder().build().unwrap();
+    http.enforce_http(false);
+    let connector = native_tls::TlsConnector::builder()
+        .danger_accept_invalid_certs(true)
+        .build().unwrap();
     let connector = TlsConnector::from(connector);
     let https = HttpsConnector::from((http, connector));
     let client = Client::builder()
