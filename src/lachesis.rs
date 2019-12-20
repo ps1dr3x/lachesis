@@ -257,7 +257,7 @@ fn run_worker(conf: &LacConf) -> Result<(), i32> {
     ) = mpsc::channel();
 
     let in_conf = conf.clone();
-    let thread = thread::spawn(move || worker::run(&tx, in_conf));
+    let thread = thread::spawn(move || worker::run(tx, in_conf));
 
     loop {
         let msg = match rx.recv() {
@@ -286,12 +286,12 @@ fn run_worker(conf: &LacConf) -> Result<(), i32> {
         };
     }
 
-    thread.join().unwrap_or_else(|err| {
+    if let Err(e) = thread.join() {
         stats.log_err(format!(
             "The thread being joined has panicked: {:?}",
-            err
-        ))
-    });
+            e
+        ));
+    };
 
     stats.finish();
     Ok(())
