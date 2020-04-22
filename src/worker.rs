@@ -269,7 +269,7 @@ async fn run_async(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
     let connector = TlsConnector::from(connector);
     let https = HttpsConnector::from((http, connector));
     let client = Client::builder()
-        .keep_alive_timeout(Duration::from_secs(1))
+        .pool_idle_timeout(Duration::from_secs(5))
         .retry_canceled_requests(false)
         .build(https);
 
