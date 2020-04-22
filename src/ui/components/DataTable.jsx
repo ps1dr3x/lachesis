@@ -12,7 +12,7 @@ import {
   Modal,
   Dropdown
 } from 'semantic-ui-react'
-import uuid from 'uuid/v4'
+import { v4 as uuid } from 'uuid'
 import '../style/data-table.scss'
 
 /* global fetch */
@@ -187,7 +187,7 @@ function DataTable () {
             <Table.HeaderCell />
             {
               data.headers.map((el) => {
-                return <Table.HeaderCell key={uuid()}>{el}</Table.HeaderCell>
+                return <Table.HeaderCell key={el}>{el}</Table.HeaderCell>
               })
             }
           </Table.Row>
@@ -198,8 +198,8 @@ function DataTable () {
               if (data.rows.length) {
                 return data.rows.map((fields) => {
                   let cells = []
-                  for (let field of fields) {
-                    cells.push(<Table.Cell key={uuid()}><Label>{field}</Label></Table.Cell>)
+                  for (let field in fields) {
+                    cells.push(<Table.Cell key={uuid()}><Label>{fields[field]}</Label></Table.Cell>)
                   }
                   return (
                     <Table.Row key={fields[0]}>
@@ -226,7 +226,7 @@ function DataTable () {
         </Table.Body>
         <Table.Footer>
           <Table.Row>
-            <Table.HeaderCell colSpan='9'>
+            <Table.HeaderCell colSpan='10'>
               <Grid>
                 <Grid.Row>
                   <Grid.Column width={4}>

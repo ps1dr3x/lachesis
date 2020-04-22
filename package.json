@@ -17,24 +17,24 @@
   },
   "homepage": "https://github.com/ps1dr3x/lachesis#readme",
   "dependencies": {
-    "react": "~16.12",
-    "react-dom": "~16.12",
-    "semantic-ui-css": "~2.4",
-    "semantic-ui-react": "~0.88",
-    "uuid": "~3.3"
+    "react": "=16.13.1",
+    "react-dom": "=16.13.1",
+    "semantic-ui-css": "=2.4.1",
+    "semantic-ui-react": "=0.88.2",
+    "uuid": "=7.0.3"
   },
   "devDependencies": {
-    "@babel/core": "~7.7",
-    "@babel/preset-react": "~7.7",
-    "babel-loader": "~8.0",
-    "css-loader": "~3.3",
-    "node-sass": "~4.13",
-    "sass-loader": "~8.0",
-    "style-loader": "~1.0",
-    "webpack": "~4.41",
-    "webpack-cli": "~3.3",
-    "file-loader": "~5.0",
-    "url-loader": "~3.0"
+    "@babel/core": "=7.9.0",
+    "@babel/preset-react": "=7.9.4",
+    "babel-loader": "=8.1.0",
+    "css-loader": "=3.5.2",
+    "file-loader": "=6.0.0",
+    "node-sass": "=4.13.1",
+    "sass-loader": "=8.0.2",
+    "style-loader": "=1.1.4",
+    "url-loader": "=4.1.0",
+    "webpack": "=4.43.0",
+    "webpack-cli": "=3.3.11"
   },
   "babel": {
     "presets": [
