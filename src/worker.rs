@@ -1,54 +1,28 @@
-use serde_derive::{
-    Serialize,
-    Deserialize
-};
+use bytes::Buf;
+use colored::Colorize;
+use easy_reader::EasyReader;
+use hyper::{client::HttpConnector, Body, Client, Request, Uri};
+use hyper_tls::HttpsConnector;
+use serde_derive::{Deserialize, Serialize};
 use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
-    io::{
-        AsyncWriteExt,
-        AsyncReadExt
-    }
 };
 use tokio_tls::TlsConnector;
-use hyper::{
-    Client,
-    Uri,
-    Request,
-    Body,
-    client::HttpConnector
-};
-use hyper_tls::HttpsConnector;
-use bytes::Buf;
-use easy_reader::EasyReader;
-use colored::Colorize;
 
 use std::{
-    sync::mpsc,
-    time::Duration,
-    path::Path,
-    fs::File,
-    net::SocketAddr,
-    collections::HashSet
+    collections::HashSet, fs::File, net::SocketAddr, path::Path, sync::mpsc, time::Duration,
 };
 
-use crate::lachesis::{
-    LacConf,
-    Options
-};
-use WorkerMessage::{
-    Response,
-    LogInfo,
-    LogErr,
-    NextTarget,
-    Shutdown
-};
+use crate::lachesis::{LacConf, Options};
+use WorkerMessage::{LogErr, LogInfo, NextTarget, Response, Shutdown};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DatasetRecord {
     pub name: String,
     #[serde(rename = "type")]
     pub record_type: String,
-    pub value: String
+    pub value: String,
 }
 
 #[derive(Debug, Clone)]
@@ -57,7 +31,7 @@ pub struct Target {
     pub ip: String,
     pub port: u16,
     pub protocol: String,
-    pub response: String
+    pub response: String,
 }
 
 impl Target {
@@ -67,7 +41,7 @@ impl Target {
             ip: String::new(),
             port: 0,
             protocol: String::new(),
-            response: String::new()
+            response: String::new(),
         }
     }
 
@@ -86,7 +60,7 @@ pub enum WorkerMessage {
     LogInfo(String),
     LogErr(String),
     NextTarget,
-    Shutdown
+    Shutdown,
 }
 
 async fn http_s(
@@ -94,7 +68,7 @@ async fn http_s(
     client: Client<HttpsConnector<HttpConnector>>,
     target: Target,
     ports: HashSet<u16>,
-    user_agent: String
+    user_agent: String,
 ) {
     for protocol in ["https", "http"].iter() {
         for port in &ports {
@@ -102,12 +76,7 @@ async fn http_s(
             target.protocol = protocol.to_string();
             target.port = *port;
 
-            let uri: Uri = format!(
-                    "{}://{}:{}",
-                    target.protocol,
-                    target.ip,
-                    target.port
-                )
+            let uri: Uri = format!("{}://{}:{}", target.protocol, target.ip, target.port)
                 .parse()
                 .unwrap();
 
@@ -118,18 +87,15 @@ async fn http_s(
                 .header("Accept", "*/*")
                 .body(Body::empty())
                 .unwrap();
-            
+
             match client.request(request).await {
                 Ok(r) => {
                     let (parts, body) = r.into_parts();
                     match hyper::body::aggregate(body).await {
                         Ok(b) => {
                             // Merge response's headers and body
-                            let mut raw_content = format!(
-                                "{:?} {}\r\n",
-                                parts.version,
-                                parts.status
-                            );
+                            let mut raw_content =
+                                format!("{:?} {}\r\n", parts.version, parts.status);
                             for header in &parts.headers {
                                 raw_content = format!(
                                     "{}{}: {}\r\n",
@@ -148,39 +114,33 @@ async fn http_s(
                             tx.send(Response(target)).unwrap();
                         }
                         Err(e) => {
-                            tx.send(LogInfo(
-                                format!(
-                                    "[{}][{}:{}] - Target not available. Error: {}",
-                                    target.protocol.to_uppercase().blue(),
-                                    target.domain.cyan(),
-                                    target.port.to_string().cyan(),
-                                    e
-                                )
-                            )).unwrap();
+                            tx.send(LogInfo(format!(
+                                "[{}][{}:{}] - Target not available. Error: {}",
+                                target.protocol.to_uppercase().blue(),
+                                target.domain.cyan(),
+                                target.port.to_string().cyan(),
+                                e
+                            )))
+                            .unwrap();
                         }
                     }
-                },
+                }
                 Err(e) => {
-                    tx.send(LogInfo(
-                        format!(
-                            "[{}][{}:{}] - Target not available. Error: {}",
-                            target.protocol.to_uppercase().blue(),
-                            target.domain.cyan(),
-                            target.port.to_string().cyan(),
-                            e
-                        )
-                    )).unwrap();
+                    tx.send(LogInfo(format!(
+                        "[{}][{}:{}] - Target not available. Error: {}",
+                        target.protocol.to_uppercase().blue(),
+                        target.domain.cyan(),
+                        target.port.to_string().cyan(),
+                        e
+                    )))
+                    .unwrap();
                 }
             };
         }
     }
 }
 
-async fn tcp_custom(
-    tx: mpsc::Sender<WorkerMessage>,
-    target: Target,
-    options: Options
-) {
+async fn tcp_custom(tx: mpsc::Sender<WorkerMessage>, target: Target, options: Options) {
     for port in &options.ports {
         let mut target = target.clone();
         target.domain = String::new();
@@ -190,13 +150,13 @@ async fn tcp_custom(
         let addr = match format!("{}:{}", target.ip, target.port).parse::<SocketAddr>() {
             Ok(addr) => addr,
             Err(_e) => {
-                tx.send(LogErr(
-                    format!(
-                        "[{}] Invalid address: {}:{}",
-                        target.protocol.to_uppercase().blue(),
-                        target.ip.cyan(), port.to_string().cyan()
-                    )
-                )).unwrap();
+                tx.send(LogErr(format!(
+                    "[{}] Invalid address: {}:{}",
+                    target.protocol.to_uppercase().blue(),
+                    target.ip.cyan(),
+                    port.to_string().cyan()
+                )))
+                .unwrap();
                 continue;
             }
         };
@@ -204,14 +164,14 @@ async fn tcp_custom(
         let mut stream = match TcpStream::connect(&addr).await {
             Ok(s) => s,
             Err(e) => {
-                tx.send(LogInfo(
-                    format!(
-                        "[{}][{}:{}] - TCP stream connection error: {}",
-                        target.protocol.to_uppercase().blue(),
-                        target.ip.cyan(),
-                        target.port.to_string().cyan(), e
-                    )
-                )).unwrap();
+                tx.send(LogInfo(format!(
+                    "[{}][{}:{}] - TCP stream connection error: {}",
+                    target.protocol.to_uppercase().blue(),
+                    target.ip.cyan(),
+                    target.port.to_string().cyan(),
+                    e
+                )))
+                .unwrap();
                 continue;
             }
         };
@@ -220,14 +180,14 @@ async fn tcp_custom(
         match stream.write_all(message.as_bytes()).await {
             Ok(_) => (),
             Err(e) => {
-                tx.send(LogInfo(
-                    format!(
-                        "[{}][{}:{}] - TCP stream write error: {}",
-                        target.protocol.to_uppercase().blue(),
-                        target.ip.cyan(),
-                        target.port.to_string().cyan(), e
-                    )
-                )).unwrap();
+                tx.send(LogInfo(format!(
+                    "[{}][{}:{}] - TCP stream write error: {}",
+                    target.protocol.to_uppercase().blue(),
+                    target.ip.cyan(),
+                    target.port.to_string().cyan(),
+                    e
+                )))
+                .unwrap();
                 continue;
             }
         };
@@ -237,14 +197,14 @@ async fn tcp_custom(
         match stream.read(&mut answer).await {
             Ok(_) => (),
             Err(e) => {
-                tx.send(LogInfo(
-                    format!(
-                        "[{}][{}:{}] - TCP stream read error: {}",
-                        target.protocol.to_uppercase().blue(),
-                        target.ip.cyan(),
-                        target.port.to_string().cyan(), e
-                    )
-                )).unwrap();
+                tx.send(LogInfo(format!(
+                    "[{}][{}:{}] - TCP stream read error: {}",
+                    target.protocol.to_uppercase().blue(),
+                    target.ip.cyan(),
+                    target.port.to_string().cyan(),
+                    e
+                )))
+                .unwrap();
                 continue;
             }
         };
@@ -265,7 +225,8 @@ async fn run_async(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
     http.enforce_http(false);
     let connector = native_tls::TlsConnector::builder()
         .danger_accept_invalid_certs(true)
-        .build().unwrap();
+        .build()
+        .unwrap();
     let connector = TlsConnector::from(connector);
     let https = HttpsConnector::from((http, connector));
     let client = Client::builder()
@@ -282,7 +243,9 @@ async fn run_async(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
             let mut easy_reader = EasyReader::new(dataset_file).unwrap();
             let line_str = easy_reader.random_line().unwrap().unwrap();
             let dataset_record: DatasetRecord = serde_json::from_str(&line_str).unwrap();
-            if dataset_record.record_type != "a" { continue; }
+            if dataset_record.record_type != "a" {
+                continue;
+            }
             Some(Target::new(dataset_record.name, dataset_record.value))
         } else {
             // If subnet mode, pick the next ip in the specified subnets
@@ -302,7 +265,7 @@ async fn run_async(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
                     let ip_s = ip.to_string();
                     Some(Target::new(ip_s.clone(), ip_s))
                 }
-                None => None
+                None => None,
             }
         };
 
@@ -328,14 +291,10 @@ async fn run_async(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
                     let target = target.clone();
                     let options = def.options.clone();
                     tokio::task::spawn(async {
-                        tcp_custom(
-                            tx,
-                            target,
-                            options
-                        ).await;
+                        tcp_custom(tx, target, options).await;
                     });
                 }
-                _ => ()
+                _ => (),
             }
         }
         if http_s_ports.len() > 0 {
@@ -343,13 +302,7 @@ async fn run_async(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
             let client = client.clone();
             let agent = conf.user_agent.clone();
             tokio::task::spawn(async {
-                http_s(
-                    tx,
-                    client,
-                    target,
-                    http_s_ports,
-                    agent
-                ).await;
+                http_s(tx, client, target, http_s_ports, agent).await;
             });
         }
 

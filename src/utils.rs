@@ -1,24 +1,15 @@
 use std::{
-    fs::{
-        self,
-        File
-    },
-    sync::{
-        Arc,
-        Mutex
-    },
-    path::Path
+    fs::{self, File},
+    path::Path,
+    sync::{Arc, Mutex},
 };
 
-use serde_json;
-use ipnet::Ipv4Net;
-use validator::Validate;
 use clap::App;
+use ipnet::Ipv4Net;
+use serde_json;
+use validator::Validate;
 
-use crate::lachesis::{
-    LacConf,
-    Definition
-};
+use crate::lachesis::{Definition, LacConf};
 use crate::worker::Target;
 
 pub fn get_conf() -> Result<LacConf, &'static str> {
@@ -75,7 +66,7 @@ pub fn get_conf() -> Result<LacConf, &'static str> {
             }
 
             defs
-        },
+        }
         None => {
             let mut defs = Vec::new();
             let mut excluded = Vec::new();
@@ -93,12 +84,14 @@ pub fn get_conf() -> Result<LacConf, &'static str> {
                 let file_name = file_name.to_str().unwrap();
                 match file_name.find(".json") {
                     Some(idx) => {
-                        if !excluded.contains(&file_name)
-                        && !excluded.contains(&&file_name[0..idx]) {
+                        if !excluded.contains(&file_name) && !excluded.contains(&&file_name[0..idx])
+                        {
                             defs.push(path.path().to_str().unwrap().to_string());
                         }
-                    },
-                    None => return Err("Found extraneous files in resources/definitions (not .json)")
+                    }
+                    None => {
+                        return Err("Found extraneous files in resources/definitions (not .json)")
+                    }
                 }
             }
 
@@ -126,16 +119,14 @@ pub fn get_conf() -> Result<LacConf, &'static str> {
                 match subnet.parse::<Ipv4Net>() {
                     Ok(net) => {
                         sn.push(net.hosts());
-                    },
-                    Err(_) => return Err("Invalid value for parameter --subnet")
+                    }
+                    Err(_) => return Err("Invalid value for parameter --subnet"),
                 }
             }
 
             Arc::new(Mutex::new((sn, 0)))
-        },
-        None => {
-            Arc::new(Mutex::new((Vec::new(), 0)))
         }
+        None => Arc::new(Mutex::new((Vec::new(), 0))),
     };
 
     Ok(LacConf {
@@ -145,7 +136,7 @@ pub fn get_conf() -> Result<LacConf, &'static str> {
         user_agent: String::from(matches.value_of("user_agent").unwrap()),
         max_targets,
         debug: matches.is_present("debug"),
-        web_ui: false
+        web_ui: false,
     })
 }
 
@@ -161,7 +152,8 @@ pub fn parse_validate_definitions(paths: &[String]) -> Result<Vec<Definition>, S
         };
 
         // JSON typed parsing
-        let definitions_part: Result<Vec<Definition>, serde_json::Error> = serde_json::from_reader(def_file);
+        let definitions_part: Result<Vec<Definition>, serde_json::Error> =
+            serde_json::from_reader(def_file);
         let definitions_part = match definitions_part {
             Ok(definitions_part) => definitions_part,
             Err(err) => {

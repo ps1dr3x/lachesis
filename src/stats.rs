@@ -1,8 +1,5 @@
-use indicatif::{
-    ProgressBar,
-    ProgressStyle
-};
 use colored::Colorize;
+use indicatif::{ProgressBar, ProgressStyle};
 
 use crate::detector::DetectorResponse;
 use crate::utils;
@@ -15,7 +12,7 @@ pub struct Stats {
     requests_http: u64,
     requests_tcp_custom: u64,
     total_requests: u64,
-    services_found: u64
+    services_found: u64,
 }
 
 impl Stats {
@@ -28,9 +25,11 @@ impl Stats {
             pb
         } else {
             let pb = ProgressBar::new(0);
-            pb.set_style(ProgressStyle::default_spinner()
-                .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ")
-                .template("\n{prefix:.bold.dim} {spinner} {wide_msg}"));
+            pb.set_style(
+                ProgressStyle::default_spinner()
+                    .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ")
+                    .template("\n{prefix:.bold.dim} {spinner} {wide_msg}"),
+            );
             pb
         };
 
@@ -42,7 +41,7 @@ impl Stats {
             requests_http: 0,
             requests_tcp_custom: 0,
             total_requests: 0,
-            services_found: 0
+            services_found: 0,
         }
     }
 
@@ -53,10 +52,12 @@ impl Stats {
             "https" => self.requests_https += 1,
             "http" => self.requests_http += 1,
             "tcp/custom" => self.requests_tcp_custom += 1,
-            _ => ()
+            _ => (),
         }
 
-        if matching { self.services_found += 1; }
+        if matching {
+            self.services_found += 1;
+        }
 
         self.update_message();
     }
@@ -72,32 +73,24 @@ impl Stats {
     }
 
     fn update_message(&self) {
-        self.progress_bar.set_message(
-            &format!(
-                "Targets {}   Https {}   Http {}   Tcp/custom {}   Matching {}",
-                self.targets.to_string().cyan(),
-                self.requests_https.to_string().cyan(),
-                self.requests_http.to_string().cyan(),
-                self.requests_tcp_custom.to_string().cyan(),
-                self.services_found.to_string().cyan()
-            )
-        );
+        self.progress_bar.set_message(&format!(
+            "Targets {}   Https {}   Http {}   Tcp/custom {}   Matching {}",
+            self.targets.to_string().cyan(),
+            self.requests_https.to_string().cyan(),
+            self.requests_http.to_string().cyan(),
+            self.requests_tcp_custom.to_string().cyan(),
+            self.services_found.to_string().cyan()
+        ));
     }
 
     pub fn log_info(&mut self, message: String) {
-        self.progress_bar.println(format!(
-            "[{}]{}",
-            "INFO".yellow(),
-            message
-        ));
+        self.progress_bar
+            .println(format!("[{}]{}", "INFO".yellow(), message));
     }
 
     pub fn log_err(&mut self, message: String) {
-        self.progress_bar.println(format!(
-            "[{}]{}",
-            "ERROR".red(),
-            message
-        ));
+        self.progress_bar
+            .println(format!("[{}]{}", "ERROR".red(), message));
     }
 
     pub fn log_match(&mut self, dr: &DetectorResponse) {

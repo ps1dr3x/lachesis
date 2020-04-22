@@ -1,24 +1,30 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
-#[macro_use] extern crate clap;
-#[macro_use] extern crate validator_derive;
-#[macro_use] extern crate rocket;
+#[macro_use]
+extern crate clap;
+#[macro_use]
+extern crate validator_derive;
+#[macro_use]
+extern crate rocket;
 
-mod lachesis;
-mod worker;
-mod detector;
-mod utils;
 mod db;
+mod detector;
+mod lachesis;
 mod stats;
+mod utils;
 mod validators;
 mod web;
+mod worker;
 
+use colored::Colorize;
 use std::process;
 use unindent::unindent;
-use colored::Colorize;
 
 fn logo() {
-    println!("{}", unindent("
+    println!(
+        "{}",
+        unindent(
+            "
 
 
         -------------8<-------------\x1b[1;36m
@@ -29,7 +35,9 @@ fn logo() {
                               v0.2.0\x1b[0m
         -------------8<-------------
 
-    "));
+    "
+        )
+    );
 }
 
 fn run_lachesis() -> Result<(), i32> {
@@ -50,6 +58,6 @@ fn run_lachesis() -> Result<(), i32> {
 fn main() {
     process::exit(match run_lachesis() {
         Ok(_) => 0,
-        Err(exit_code) => exit_code
+        Err(exit_code) => exit_code,
     });
 }

@@ -1,10 +1,10 @@
+use colored::Colorize;
 use regex::Regex;
 use semver::Version;
-use colored::Colorize;
 
 use crate::lachesis::Definition;
-use crate::worker::Target;
 use crate::utils::format_host;
+use crate::worker::Target;
 
 #[derive(Clone, Debug)]
 pub struct DetectorResponse {
@@ -12,7 +12,7 @@ pub struct DetectorResponse {
     pub service: String,
     pub version: String,
     pub description: String,
-    pub error: Option<String>
+    pub error: Option<String>,
 }
 
 impl DetectorResponse {
@@ -22,7 +22,7 @@ impl DetectorResponse {
             service: String::new(),
             version: String::new(),
             description: String::new(),
-            error: None
+            error: None,
         }
     }
 
@@ -34,11 +34,7 @@ impl DetectorResponse {
     }
 }
 
-pub fn detect(
-        target: &Target,
-        definitions: &[Definition]
-    ) -> Vec<DetectorResponse> {
-
+pub fn detect(target: &Target, definitions: &[Definition]) -> Vec<DetectorResponse> {
     let mut matching = Vec::new();
 
     for def in definitions {
@@ -47,7 +43,7 @@ pub fn detect(
         let service_re = Regex::new(def.service.regex.as_str()).unwrap();
         match service_re.find(&target.response) {
             Some(m) => m,
-            None => continue
+            None => continue,
         };
 
         response.service = def.name.clone();
@@ -57,14 +53,14 @@ pub fn detect(
 
         let versions = match def.versions.clone() {
             Some(ver) => ver,
-            None => continue
+            None => continue,
         };
 
         if let Some(semver) = versions.semver {
             let version_re = Regex::new(semver.regex.as_str()).unwrap();
             let version_mat = match version_re.captures(&target.response) {
                 Some(m) => m,
-                None => continue
+                None => continue,
             };
 
             response.version = version_mat["version"].to_string();
@@ -72,7 +68,9 @@ pub fn detect(
             // Incomplete semver fix (e.g. 4.6 -> 4.6.0)
             let mut dots = 0;
             for c in response.version.bytes() {
-                if c == b'.' { dots += 1; }
+                if c == b'.' {
+                    dots += 1;
+                }
             }
             if dots < 2 {
                 response.version += ".0";
@@ -95,7 +93,8 @@ pub fn detect(
 
             for ver in semver.ranges {
                 if version >= Version::parse(ver.from.as_str()).unwrap()
-                    && version <= Version::parse(ver.to.as_str()).unwrap() {
+                    && version <= Version::parse(ver.to.as_str()).unwrap()
+                {
                     response.description = ver.description;
                     matching.push(response.clone());
                 }

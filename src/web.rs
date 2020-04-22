@@ -1,38 +1,21 @@
-use std::{
-    path::{
-        Path,
-        PathBuf
-    },
-    sync::{
-        mpsc,
-        Arc,
-        Mutex
-    }
-};
-use rocket::{
-    self,
-    Request,
-    State,
-    request::Form,
-    response::NamedFile,
-    http::Status
-};
-use rocket_contrib::json::Json;
+use crate::db::{DbMan, PaginatedServices};
 use colored::Colorize;
-use crate::db::{
-    DbMan,
-    PaginatedServices
+use rocket::{self, http::Status, request::Form, response::NamedFile, Request, State};
+use rocket_contrib::json::Json;
+use std::{
+    path::{Path, PathBuf},
+    sync::{mpsc, Arc, Mutex},
 };
 
 #[derive(Debug, Clone)]
 pub struct UIMessage {
-    pub message: String
+    pub message: String,
 }
 
 #[derive(FromForm)]
 struct Pagination {
     offset: u32,
-    rows: u32
+    rows: u32,
 }
 
 #[get("/")]
@@ -47,7 +30,10 @@ fn static_files(file: PathBuf) -> Result<NamedFile, Status> {
 }
 
 #[get("/services?<params..>")]
-fn services(tx: State<Arc<Mutex<mpsc::Sender<UIMessage>>>>, params: Form<Pagination>) -> Result<Json<PaginatedServices>, Status> {
+fn services(
+    tx: State<Arc<Mutex<mpsc::Sender<UIMessage>>>>,
+    params: Form<Pagination>,
+) -> Result<Json<PaginatedServices>, Status> {
     let db = match DbMan::init() {
         Ok(db) => db,
         Err(err) => {
@@ -56,10 +42,10 @@ fn services(tx: State<Arc<Mutex<mpsc::Sender<UIMessage>>>>, params: Form<Paginat
                     "[{}] Embedded db initialization/connection error: {}",
                     "ERROR".red(),
                     err
-                )
+                ),
             };
             tx.lock().unwrap().send(msg).unwrap();
-            return Err(Status::InternalServerError)
+            return Err(Status::InternalServerError);
         }
     };
 
@@ -67,11 +53,7 @@ fn services(tx: State<Arc<Mutex<mpsc::Sender<UIMessage>>>>, params: Form<Paginat
         Ok(ss) => Ok(Json(ss)),
         Err(err) => {
             let msg = UIMessage {
-                message: format!(
-                    "[{}] Embedded db query error: {}",
-                    "ERROR".red(),
-                    err
-                )
+                message: format!("[{}] Embedded db query error: {}", "ERROR".red(), err),
             };
             tx.lock().unwrap().send(msg).unwrap();
             Err(Status::InternalServerError)
@@ -80,7 +62,10 @@ fn services(tx: State<Arc<Mutex<mpsc::Sender<UIMessage>>>>, params: Form<Paginat
 }
 
 #[delete("/services", format = "application/json", data = "<ids>")]
-fn del_services(tx: State<Arc<Mutex<mpsc::Sender<UIMessage>>>>, ids: Json<Vec<u32>>) -> Result<&str, Status> {
+fn del_services(
+    tx: State<Arc<Mutex<mpsc::Sender<UIMessage>>>>,
+    ids: Json<Vec<u32>>,
+) -> Result<&str, Status> {
     let db = match DbMan::init() {
         Ok(db) => db,
         Err(err) => {
@@ -89,10 +74,10 @@ fn del_services(tx: State<Arc<Mutex<mpsc::Sender<UIMessage>>>>, ids: Json<Vec<u3
                     "[{}] Embedded db initialization/connection error: {}",
                     "ERROR".red(),
                     err
-                )
+                ),
             };
             tx.lock().unwrap().send(msg).unwrap();
-            return Err(Status::InternalServerError)
+            return Err(Status::InternalServerError);
         }
     };
 
@@ -100,11 +85,7 @@ fn del_services(tx: State<Arc<Mutex<mpsc::Sender<UIMessage>>>>, ids: Json<Vec<u3
         Ok(_ss) => Ok("OK"),
         Err(err) => {
             let msg = UIMessage {
-                message: format!(
-                    "[{}] Embedded db query error: {}",
-                    "ERROR".red(),
-                    err
-                )
+                message: format!("[{}] Embedded db query error: {}", "ERROR".red(), err),
             };
             tx.lock().unwrap().send(msg).unwrap();
             Err(Status::InternalServerError)

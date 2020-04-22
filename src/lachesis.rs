@@ -1,55 +1,30 @@
 use std::{
-    thread,
-    sync::{
-        mpsc,
-        Arc,
-        Mutex,
-        mpsc::{
-            Sender,
-            Receiver,
-            channel
-        }
-    },
-    time,
     fs::File,
     io::prelude::Write,
-    path::Path
+    path::Path,
+    sync::{
+        mpsc,
+        mpsc::{channel, Receiver, Sender},
+        Arc, Mutex,
+    },
+    thread, time,
 };
 
-use serde_derive::{
-    Serialize,
-    Deserialize
-};
-use ipnet::Ipv4AddrRange;
 use colored::Colorize;
+use headless_chrome::{browser, protocol::page::ScreenshotFormat, Browser, LaunchOptionsBuilder};
+use ipnet::Ipv4AddrRange;
+use serde_derive::{Deserialize, Serialize};
 use validator::Validate;
-use headless_chrome::{
-    browser,
-    Browser,
-    LaunchOptionsBuilder,
-    protocol::page::ScreenshotFormat
-};
 
 use crate::db::DbMan;
-use crate::worker::{
-    self,
-    WorkerMessage,
-    Target
-};
 use crate::detector;
 use crate::stats::Stats;
-use crate::validators::{
-    validate_definition,
-    validate_protocol,
-    validate_regex,
-    validate_semver,
-    validate_regex_ver
-};
-use crate::web::{
-    self,
-    UIMessage
-};
 use crate::utils::format_host;
+use crate::validators::{
+    validate_definition, validate_protocol, validate_regex, validate_regex_ver, validate_semver,
+};
+use crate::web::{self, UIMessage};
+use crate::worker::{self, Target, WorkerMessage};
 
 #[derive(Clone, Debug, Validate)]
 pub struct LacConf {
@@ -60,7 +35,7 @@ pub struct LacConf {
     pub user_agent: String,
     pub max_targets: u64,
     pub debug: bool,
-    pub web_ui: bool
+    pub web_ui: bool,
 }
 
 impl LacConf {
@@ -72,7 +47,7 @@ impl LacConf {
             user_agent: String::new(),
             max_targets: 0,
             debug: false,
-            web_ui: false
+            web_ui: false,
         }
     }
 }
@@ -87,21 +62,21 @@ pub struct Definition {
     #[validate]
     pub service: Service,
     #[validate]
-    pub versions: Option<Versions>
+    pub versions: Option<Versions>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Options {
     pub ports: Vec<u16>,
     pub timeout: Option<bool>,
-    pub message: Option<String>
+    pub message: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Validate)]
 pub struct Service {
     #[validate(custom = "validate_regex")]
     pub regex: String,
-    pub log: bool
+    pub log: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Validate)]
@@ -109,7 +84,7 @@ pub struct Versions {
     #[validate]
     pub semver: Option<SemverVersions>,
     #[validate(custom = "validate_regex_ver")]
-    pub regex: Option<Vec<RegexVersion>>
+    pub regex: Option<Vec<RegexVersion>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Validate)]
@@ -117,7 +92,7 @@ pub struct SemverVersions {
     #[validate(custom = "validate_regex")]
     pub regex: String,
     #[validate]
-    pub ranges: Vec<RangeVersion>
+    pub ranges: Vec<RangeVersion>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Validate)]
@@ -126,7 +101,7 @@ pub struct RangeVersion {
     pub from: String,
     #[validate(custom = "validate_semver")]
     pub to: String,
-    pub description: String
+    pub description: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Validate)]
@@ -134,20 +109,19 @@ pub struct RegexVersion {
     #[validate(custom = "validate_regex")]
     pub regex: String,
     pub version: String,
-    pub description: String
+    pub description: String,
 }
 
 fn maybe_take_screenshot(target: &Target, id: String) {
     let target = target.clone();
     thread::spawn(move || {
-        if target.protocol != "https"
-        && target.protocol != "http" {
+        if target.protocol != "https" && target.protocol != "http" {
             return;
         }
 
         let browser_path = match browser::default_executable() {
             Ok(path) => path,
-            Err(_e) => return
+            Err(_e) => return,
         };
 
         let browser_options = LaunchOptionsBuilder::default()
@@ -156,7 +130,7 @@ fn maybe_take_screenshot(target: &Target, id: String) {
             .unwrap();
         let browser = match Browser::new(browser_options) {
             Ok(b) => b,
-            Err(_e) => return
+            Err(_e) => return,
         };
         browser.wait_for_initial_tab().unwrap();
         let tab = browser.new_tab().unwrap();
@@ -174,17 +148,14 @@ fn maybe_take_screenshot(target: &Target, id: String) {
         match tab.navigate_to(&host) {
             Ok(tab) => {
                 thread::sleep(time::Duration::from_secs(10));
-                let jpeg_data = tab.capture_screenshot(
-                    ScreenshotFormat::JPEG(Some(75)),
-                    None,
-                    true
-                ).unwrap();
-                let mut file = File::create(
-                    Path::new("data/screenshots/").join(&(id + ".jpg"))
-                ).unwrap();
+                let jpeg_data = tab
+                    .capture_screenshot(ScreenshotFormat::JPEG(Some(75)), None, true)
+                    .unwrap();
+                let mut file =
+                    File::create(Path::new("data/screenshots/").join(&(id + ".jpg"))).unwrap();
                 file.write_all(&jpeg_data).unwrap();
-            },
-            Err(_e) => return
+            }
+            Err(_e) => return,
         };
     });
 }
@@ -193,7 +164,7 @@ fn handle_worker_response(
     conf: &LacConf,
     stats: &mut Stats,
     dbm: &DbMan,
-    target: Target
+    target: Target,
 ) -> Result<(), i32> {
     stats.log_info(format!(
         "[{}][{}:{}] Received a response. Length: {}",
@@ -203,10 +174,7 @@ fn handle_worker_response(
         target.response.len().to_string().cyan()
     ));
 
-    let responses = detector::detect(
-        &target,
-        &conf.definitions
-    );
+    let responses = detector::detect(&target, &conf.definitions);
 
     let mut matching = false;
     if !responses.is_empty() {
@@ -251,10 +219,7 @@ fn run_worker(conf: &LacConf) -> Result<(), i32> {
         }
     };
 
-    let (tx, rx): (
-        Sender<WorkerMessage>,
-        Receiver<WorkerMessage>
-    ) = mpsc::channel();
+    let (tx, rx): (Sender<WorkerMessage>, Receiver<WorkerMessage>) = mpsc::channel();
 
     let in_conf = conf.clone();
     let thread = thread::spawn(move || worker::run(tx, in_conf));
@@ -262,35 +227,33 @@ fn run_worker(conf: &LacConf) -> Result<(), i32> {
     loop {
         let msg = match rx.recv() {
             Ok(msg) => msg,
-            Err(_) => continue
+            Err(_) => continue,
         };
 
         match msg {
             WorkerMessage::LogInfo(msg) => {
-                if !conf.debug { continue; }
+                if !conf.debug {
+                    continue;
+                }
                 stats.log_info(msg);
                 continue;
-            },
+            }
             WorkerMessage::LogErr(msg) => {
                 stats.log_err(msg);
                 continue;
-            },
+            }
             WorkerMessage::Shutdown => break,
             WorkerMessage::Response(target) => {
-                match handle_worker_response(conf, &mut stats, &dbm, target) {
-                    Ok(()) => (),
-                    Err(code) => return Err(code)
+                if let Err(code) = handle_worker_response(conf, &mut stats, &dbm, target) {
+                    return Err(code);
                 }
-            },
-            WorkerMessage::NextTarget => stats.increment_targets()
+            }
+            WorkerMessage::NextTarget => stats.increment_targets(),
         };
     }
 
     if let Err(e) = thread.join() {
-        stats.log_err(format!(
-            "The thread being joined has panicked: {:?}",
-            e
-        ));
+        stats.log_err(format!("The thread being joined has panicked: {:?}", e));
     };
 
     stats.finish();
@@ -298,19 +261,15 @@ fn run_worker(conf: &LacConf) -> Result<(), i32> {
 }
 
 fn run_ui() -> Result<(), i32> {
-    let (tx, rx): (
-        Sender<UIMessage>,
-        Receiver<UIMessage>
-    ) = channel();
+    let (tx, rx): (Sender<UIMessage>, Receiver<UIMessage>) = channel();
 
     thread::spawn(move || web::run(tx));
 
     loop {
-        let msg = match rx.recv() {
-            Ok(msg) => msg,
-            Err(_err) => continue
+        match rx.recv() {
+            Ok(msg) => println!("{}", msg.message),
+            Err(_) => continue,
         };
-        println!("{}", msg.message);
     }
 }
 
