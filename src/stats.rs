@@ -106,9 +106,9 @@ impl Stats {
 
     pub fn finish(&mut self) {
         if self.max_targets != 0 && self.targets < self.max_targets {
-            self.log_info(format!(
-                "All the targets have been consumed before reaching the specified max-targets number"
-            ));
+            self.log_info(
+                "All the targets have been consumed before reaching the specified max-targets number".to_string()
+            );
         }
         self.progress_bar.finish();
     }

@@ -155,7 +155,7 @@ fn maybe_take_screenshot(target: &Target, id: String) {
                     File::create(Path::new("data/screenshots/").join(&(id + ".jpg"))).unwrap();
                 file.write_all(&jpeg_data).unwrap();
             }
-            Err(_e) => return,
+            Err(_e) => {}
         };
     });
 }

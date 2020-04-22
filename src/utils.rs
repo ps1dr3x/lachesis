@@ -6,7 +6,6 @@ use std::{
 
 use clap::App;
 use ipnet::Ipv4Net;
-use serde_json;
 use validator::Validate;
 
 use crate::lachesis::{Definition, LacConf};

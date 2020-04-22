@@ -73,7 +73,7 @@ async fn http_s(
     for protocol in ["https", "http"].iter() {
         for port in &ports {
             let mut target = target.clone();
-            target.protocol = protocol.to_string();
+            target.protocol = (*protocol).to_string();
             target.port = *port;
 
             let uri: Uri = format!("{}://{}:{}", target.protocol, target.ip, target.port)
@@ -193,7 +193,7 @@ async fn tcp_custom(tx: mpsc::Sender<WorkerMessage>, target: Target, options: Op
         };
 
         // FIXME - find a better way to read the answer
-        let mut answer = [0; 100000];
+        let mut answer = [0; 100_000];
         match stream.read(&mut answer).await {
             Ok(_) => (),
             Err(e) => {
@@ -297,7 +297,7 @@ async fn run_async(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
                 _ => (),
             }
         }
-        if http_s_ports.len() > 0 {
+        if !http_s_ports.is_empty() {
             let tx = tx.clone();
             let client = client.clone();
             let agent = conf.user_agent.clone();
