@@ -7,11 +7,17 @@ use serde_derive::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
+    sync::Semaphore,
 };
 use tokio_tls::TlsConnector;
 
 use std::{
-    collections::HashSet, fs::File, net::SocketAddr, path::Path, sync::mpsc, time::Duration,
+    collections::HashSet,
+    fs::File,
+    net::SocketAddr,
+    path::Path,
+    sync::{mpsc, Arc, Mutex},
+    time::Duration,
 };
 
 use crate::lachesis::{LacConf, Options};
@@ -230,7 +236,7 @@ fn get_next_target(conf: &LacConf) -> Option<Target> {
                 continue;
             }
             return Some(Target::new(dataset_record.name, dataset_record.value));
-        }        
+        }
     } else {
         // If subnet mode, pick the next ip in the specified subnets
         let mut current_subnet_idx = conf.subnets.lock().unwrap().1;
@@ -251,72 +257,87 @@ fn get_next_target(conf: &LacConf) -> Option<Target> {
     }
 }
 
-#[tokio::main]
-async fn run_async(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
-    let mut target_n = 0;
-
-    let mut http = HttpConnector::new();
-    http.set_connect_timeout(Some(Duration::from_secs(5)));
-    http.set_happy_eyeballs_timeout(Some(Duration::from_secs(1)));
-    http.enforce_http(false);
-    let connector = native_tls::TlsConnector::builder()
-        .danger_accept_invalid_certs(true)
+pub fn run(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
+    let mut rt = tokio::runtime::Builder::new()
+        .threaded_scheduler()
+        .enable_all()
         .build()
         .unwrap();
-    let connector = TlsConnector::from(connector);
-    let https = HttpsConnector::from((http, connector));
-    let client = Client::builder()
-        .pool_idle_timeout(Duration::from_secs(5))
-        .retry_canceled_requests(false)
-        .build(https);
 
-    while conf.max_targets == 0 || target_n < conf.max_targets {
-        let target = if let Some(target) = get_next_target(&conf) {
-            target
-        } else {
-            // All the targets have been consumed
-            break;
-        };
+    rt.block_on(async {
+        let mut http = HttpConnector::new();
+        http.set_connect_timeout(Some(Duration::from_millis(2500)));
+        http.set_happy_eyeballs_timeout(Some(Duration::from_secs(1)));
+        http.enforce_http(false);
+        let connector = native_tls::TlsConnector::builder()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .unwrap();
+        let connector = TlsConnector::from(connector);
+        let https = HttpsConnector::from((http, connector));
+        let client = Client::builder()
+            .pool_idle_timeout(Duration::from_millis(2500))
+            .retry_canceled_requests(false)
+            .build(https);
 
-        // Requests
-        let mut http_s_ports = HashSet::new();
-        for def in conf.clone().definitions {
-            match def.protocol.as_str() {
-                "http/s" => {
-                    // Only one request per port
-                    for port in def.options.ports {
-                        http_s_ports.insert(port);
+        let semaphore = Arc::new(Semaphore::new(500));
+        let mut targets = 0;
+        let completed = Arc::new(Mutex::new(0));
+        while conf.max_targets == 0 || targets < conf.max_targets {
+            let target = if let Some(target) = get_next_target(&conf) {
+                target
+            } else {
+                // All the targets have been consumed
+                break;
+            };
+
+            let mut http_s_ports = HashSet::new();
+            for def in conf.clone().definitions {
+                match def.protocol.as_str() {
+                    "http/s" => {
+                        // Only one http/s request per port
+                        for port in def.options.ports {
+                            http_s_ports.insert(port);
+                        }
                     }
+                    "tcp/custom" => {
+                        let tx = tx.clone();
+                        let target = target.clone();
+                        let options = def.options.clone();
+                        let completed = completed.clone();
+                        let semaphore = semaphore.clone();
+                        semaphore.acquire().await.forget();
+                        tokio::spawn(async move {
+                            tcp_custom(tx, target, options).await;
+                            *completed.lock().unwrap() += 1;
+                            semaphore.add_permits(1);
+                        });
+                    }
+                    _ => (),
                 }
-                "tcp/custom" => {
-                    let tx = tx.clone();
-                    let target = target.clone();
-                    let options = def.options.clone();
-                    tokio::task::spawn(async {
-                        tcp_custom(tx, target, options).await;
-                    });
-                }
-                _ => (),
             }
+            if !http_s_ports.is_empty() {
+                let tx = tx.clone();
+                let client = client.clone();
+                let uagent = conf.user_agent.clone();
+                let completed = completed.clone();
+                let semaphore = semaphore.clone();
+                semaphore.acquire().await.forget();
+                tokio::spawn(async move {
+                    http_s(tx, client, target, http_s_ports, uagent).await;
+                    *completed.lock().unwrap() += 1;
+                    semaphore.add_permits(1);
+                });
+            }
+
+            targets += 1;
+            tx.send(NextTarget).unwrap();
         }
-        if !http_s_ports.is_empty() {
-            let tx = tx.clone();
-            let client = client.clone();
-            let agent = conf.user_agent.clone();
-            tokio::task::spawn(async {
-                http_s(tx, client, target, http_s_ports, agent).await;
-            });
+
+        while *completed.lock().unwrap() < conf.max_targets {
+            // Wait for existing connections to complete
         }
 
-        tokio::task::yield_now().await;
-
-        target_n += 1;
-        tx.send(NextTarget).unwrap();
-    }
-
-    tx.send(Shutdown).unwrap();
-}
-
-pub fn run(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
-    run_async(tx, conf);
+        tx.send(Shutdown).unwrap();
+    });
 }
