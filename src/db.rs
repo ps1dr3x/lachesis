@@ -78,7 +78,7 @@ impl DbMan {
             "
             SELECT *
             FROM services
-            ORDER BY id
+            ORDER BY id DESC
             LIMIT ?
             OFFSET ?
         ",
