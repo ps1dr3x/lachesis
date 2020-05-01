@@ -2,7 +2,7 @@
 
 [Lachesis](https://en.wikipedia.org/wiki/Lachesis) is a work in progress web services mass scanner written in Rust.
 
-This project was born as a simple test of the Rust's networking (and asynchronous I/O) performance, but later expanded with the intention to create a sort of "little personal Shodan", an open (and hopefully very fast) crawler that exposes the magnitude of outdated, vulnerable, misconfigured services publicly accessible around the web.
+This project was born as a simple test of the Rust's networking (and asynchronous I/O) performance, but later expanded with the intention to create a sort of "little personal Shodan", an open scanner that collects statistical data on web services and exposes the magnitude of outdated, vulnerable, misconfigured services publicly accessible around the web.
 
 ```
 -------------8<-------------
@@ -53,18 +53,22 @@ OPTIONS:
                                       
     -m, --max-targets <NUM>        Sets a maximum limit of targets
                                     
+    -t, --req-timeout <NUM>        Sets a maximum timeout for each request (seconds)
+                                    [default: 11]
     -S, --subnet <SUBNET>...       Scan one or more subnets
                                     
-    -u, --user-agent <STRING>      Sets a custom user agent (http/https) [default: lachesis/0.2.0]
+    -u, --user-agent <STRING>      Sets a custom user agent (http/https)
+                                    [default: lachesis/0.2.0]
 ```
 
 ## Roadmap / TODOs
 
 - Optimise https, http and tcp requests to minimize unnecessary overheads
 - Add much more definitions
-- Expand the scanner's capabilities to other configurations and scanning methods
+- Plugin system to expand the scanner's capabilities to other configurations, request types and scanning methods
 - Do some information gathering on the host after each finding
 - Improve the API and the Web UI (a geo map would be nice)
+- Distributed DB/agent mode
 
 ## Build from source
 
@@ -103,9 +107,9 @@ cargo run -- --help
 
 #### "Too many open files" error
 
-Some Linux distributions are configured with a very low limit to the number of maximum opened files. In order to run this software properly, it could be needed to increment it.
+Some Linux distributions are configured with a very low limit on the number of maximum opened files. Depending on the number of concurrent requests and other factors, that limit might be reached, crashing the software.
 
-The following limits are only an example. Depending on the machine configuration and overall load they can be set higher or lower, only for an user or only for root
+The limits can usually be increased in the following files. This is only an example, depending on the machine configuration and overall load they can be set higher or lower, only for an user or only for root.
 
 - PAM (/etc/security/limits.conf)
   ```

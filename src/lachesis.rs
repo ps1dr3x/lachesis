@@ -34,6 +34,7 @@ pub struct LacConf {
     pub subnets: Arc<Mutex<(Vec<Ipv4AddrRange>, usize)>>,
     pub user_agent: String,
     pub max_targets: u64,
+    pub req_timeout: u64,
     pub debug: bool,
     pub web_ui: bool,
 }
@@ -46,6 +47,7 @@ impl LacConf {
             subnets: Arc::new(Mutex::new((Vec::new(), 0))),
             user_agent: String::new(),
             max_targets: 0,
+            req_timeout: 10,
             debug: false,
             web_ui: false,
         }

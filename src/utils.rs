@@ -46,6 +46,15 @@ pub fn get_conf() -> Result<LacConf, &'static str> {
         0
     };
 
+    // If a value for --req-timeout/-t is specified, check that it's a valid number
+    let req_timeout = match value_t!(matches, "req_timeout", u64) {
+        Ok(n) => n,
+        Err(_e) => {
+            println!("err {}", _e);
+            return Err("Invalid value for parameter --req-timeout/-t (not a valid number)");
+        }
+    };
+
     // Load definitions (selected ones or all the files in resources/definitions folder
     // minus the excluded ones)
     let definitions_paths = match matches.values_of("def") {
@@ -134,6 +143,7 @@ pub fn get_conf() -> Result<LacConf, &'static str> {
         subnets,
         user_agent: String::from(matches.value_of("user_agent").unwrap()),
         max_targets,
+        req_timeout,
         debug: matches.is_present("debug"),
         web_ui: false,
     })

@@ -7,7 +7,9 @@ use serde_derive::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
+    runtime,
     sync::Semaphore,
+    time::timeout,
 };
 use tokio_tls::TlsConnector;
 
@@ -75,6 +77,7 @@ async fn http_s(
     target: Target,
     ports: HashSet<u16>,
     user_agent: String,
+    req_timeout: u64,
 ) {
     for protocol in ["https", "http"].iter() {
         for port in &ports {
@@ -94,46 +97,74 @@ async fn http_s(
                 .body(Body::empty())
                 .unwrap();
 
-            match client.request(request).await {
-                Ok(r) => {
-                    let (parts, body) = r.into_parts();
-                    match hyper::body::aggregate(body).await {
-                        Ok(b) => {
-                            // Merge response's headers and body
-                            let mut raw_content =
-                                format!("{:?} {}\r\n", parts.version, parts.status);
-                            for header in &parts.headers {
-                                raw_content = format!(
-                                    "{}{}: {}\r\n",
-                                    raw_content,
-                                    header.0,
-                                    header.1.to_str().unwrap_or("")
-                                );
-                            }
-                            raw_content = format!(
-                                "{}\r\n{}",
-                                raw_content,
-                                String::from_utf8_lossy(b.bytes())
-                            );
-                            target.response = raw_content;
-                            // Send the response
-                            tx.send(Response(target)).unwrap();
-                        }
-                        Err(e) => {
-                            tx.send(LogInfo(format!(
-                                "[{}][{}:{}] - Target not available. Error: {}",
-                                target.protocol.to_uppercase().blue(),
-                                target.domain.cyan(),
-                                target.port.to_string().cyan(),
-                                e
-                            )))
-                            .unwrap();
-                        }
+            let request = match timeout(Duration::from_secs(req_timeout / 2), client.request(request)).await {
+                Ok(r) => r,
+                Err(_) => {
+                    tx.send(LogInfo(format!(
+                        "[{}][{}:{}] - Request timeout",
+                        target.protocol.to_uppercase().blue(),
+                        target.domain.cyan(),
+                        target.port.to_string().cyan(),
+                    )))
+                    .unwrap();
+                    continue;
+                }
+            };
+
+            let (parts, body) = match request {
+                Ok(r) => r.into_parts(),
+                Err(e) => {
+                    tx.send(LogInfo(format!(
+                        "[{}][{}:{}] - Request error: {}",
+                        target.protocol.to_uppercase().blue(),
+                        target.domain.cyan(),
+                        target.port.to_string().cyan(),
+                        e
+                    )))
+                    .unwrap();
+                    continue;
+                }
+            };
+
+            let body = match timeout(Duration::from_secs(req_timeout / 2), hyper::body::aggregate(body)).await {
+                Ok(a) => a,
+                Err(_) => {
+                    tx.send(LogInfo(format!(
+                        "[{}][{}:{}] - Response body timeout",
+                        target.protocol.to_uppercase().blue(),
+                        target.domain.cyan(),
+                        target.port.to_string().cyan(),
+                    )))
+                    .unwrap();
+                    continue;
+                }
+            };
+
+            match body {
+                Ok(b) => {
+                    // Merge response's headers and body
+                    let mut raw_content =
+                        format!("{:?} {}\r\n", parts.version, parts.status);
+                    for header in &parts.headers {
+                        raw_content = format!(
+                            "{}{}: {}\r\n",
+                            raw_content,
+                            header.0,
+                            header.1.to_str().unwrap_or("")
+                        );
                     }
+                    raw_content = format!(
+                        "{}\r\n{}",
+                        raw_content,
+                        String::from_utf8_lossy(b.bytes())
+                    );
+                    target.response = raw_content;
+
+                    tx.send(Response(target)).unwrap();
                 }
                 Err(e) => {
                     tx.send(LogInfo(format!(
-                        "[{}][{}:{}] - Target not available. Error: {}",
+                        "[{}][{}:{}] - Response error: {}",
                         target.protocol.to_uppercase().blue(),
                         target.domain.cyan(),
                         target.port.to_string().cyan(),
@@ -146,7 +177,7 @@ async fn http_s(
     }
 }
 
-async fn tcp_custom(tx: mpsc::Sender<WorkerMessage>, target: Target, options: Options) {
+async fn tcp_custom(tx: mpsc::Sender<WorkerMessage>, target: Target, options: Options, req_timeout: u64) {
     for port in &options.ports {
         let mut target = target.clone();
         target.domain = String::new();
@@ -167,7 +198,21 @@ async fn tcp_custom(tx: mpsc::Sender<WorkerMessage>, target: Target, options: Op
             }
         };
 
-        let mut stream = match TcpStream::connect(&addr).await {
+        let stream = match timeout(Duration::from_secs(req_timeout / 3), TcpStream::connect(&addr)).await {
+            Ok(s) => s,
+            Err(_) => {
+                tx.send(LogInfo(format!(
+                    "[{}][{}:{}] - Tcp connection timeout",
+                    target.protocol.to_uppercase().blue(),
+                    target.ip.cyan(),
+                    target.port.to_string().cyan(),
+                )))
+                .unwrap();
+                continue;
+            }
+        };
+
+        let mut stream = match stream {
             Ok(s) => s,
             Err(e) => {
                 tx.send(LogInfo(format!(
@@ -182,16 +227,26 @@ async fn tcp_custom(tx: mpsc::Sender<WorkerMessage>, target: Target, options: Op
             }
         };
 
-        let message = options.message.clone().unwrap();
-        match stream.write_all(message.as_bytes()).await {
-            Ok(_) => (),
-            Err(e) => {
+        match timeout(Duration::from_secs(req_timeout / 3), stream.write_all(options.message.clone().unwrap().as_bytes())).await {
+            Ok(w) => {
+                if let Err(e) = w {
+                    tx.send(LogInfo(format!(
+                        "[{}][{}:{}] - TCP stream write error: {}",
+                        target.protocol.to_uppercase().blue(),
+                        target.ip.cyan(),
+                        target.port.to_string().cyan(),
+                        e
+                    )))
+                    .unwrap();
+                    continue;
+                }
+            }
+            Err(_) => {
                 tx.send(LogInfo(format!(
-                    "[{}][{}:{}] - TCP stream write error: {}",
+                    "[{}][{}:{}] - Tcp stream write timeout",
                     target.protocol.to_uppercase().blue(),
                     target.ip.cyan(),
                     target.port.to_string().cyan(),
-                    e
                 )))
                 .unwrap();
                 continue;
@@ -200,15 +255,26 @@ async fn tcp_custom(tx: mpsc::Sender<WorkerMessage>, target: Target, options: Op
 
         // FIXME - find a better way to read the answer
         let mut answer = [0; 100_000];
-        match stream.read(&mut answer).await {
-            Ok(_) => (),
-            Err(e) => {
+        match timeout(Duration::from_secs(req_timeout / 3), stream.read(&mut answer)).await {
+            Ok(w) => {
+                if let Err(e) = w {
+                    tx.send(LogInfo(format!(
+                        "[{}][{}:{}] - TCP stream read error: {}",
+                        target.protocol.to_uppercase().blue(),
+                        target.ip.cyan(),
+                        target.port.to_string().cyan(),
+                        e
+                    )))
+                    .unwrap();
+                    continue;
+                }
+            }
+            Err(_) => {
                 tx.send(LogInfo(format!(
-                    "[{}][{}:{}] - TCP stream read error: {}",
+                    "[{}][{}:{}] - Tcp stream read timeout",
                     target.protocol.to_uppercase().blue(),
                     target.ip.cyan(),
                     target.port.to_string().cyan(),
-                    e
                 )))
                 .unwrap();
                 continue;
@@ -258,7 +324,7 @@ fn get_next_target(conf: &LacConf) -> Option<Target> {
 }
 
 pub fn run(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
-    let mut rt = tokio::runtime::Builder::new()
+    let mut rt = runtime::Builder::new()
         .threaded_scheduler()
         .enable_all()
         .build()
@@ -266,8 +332,7 @@ pub fn run(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
 
     rt.block_on(async {
         let mut http = HttpConnector::new();
-        http.set_connect_timeout(Some(Duration::from_millis(2500)));
-        http.set_happy_eyeballs_timeout(Some(Duration::from_secs(1)));
+        //http.set_connect_timeout(Some(Duration::from_millis(1000)));
         http.enforce_http(false);
         let connector = native_tls::TlsConnector::builder()
             .danger_accept_invalid_certs(true)
@@ -276,8 +341,9 @@ pub fn run(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
         let connector = TlsConnector::from(connector);
         let https = HttpsConnector::from((http, connector));
         let client = Client::builder()
-            .pool_idle_timeout(Duration::from_millis(2500))
-            .retry_canceled_requests(false)
+            //.pool_idle_timeout(Duration::from_millis(1250))
+            //.http2_keep_alive_timeout(Duration::from_millis(1000))
+            //.retry_canceled_requests(false)
             .build(https);
 
         let semaphore = Arc::new(Semaphore::new(500));
@@ -292,23 +358,24 @@ pub fn run(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
             };
 
             let mut http_s_ports = HashSet::new();
-            for def in conf.clone().definitions {
+            for def in &conf.definitions {
                 match def.protocol.as_str() {
                     "http/s" => {
                         // Only one http/s request per port
-                        for port in def.options.ports {
-                            http_s_ports.insert(port);
+                        for port in &def.options.ports {
+                            http_s_ports.insert(*port);
                         }
                     }
                     "tcp/custom" => {
                         let tx = tx.clone();
                         let target = target.clone();
                         let options = def.options.clone();
+                        let timeout = conf.req_timeout;
                         let completed = completed.clone();
                         let semaphore = semaphore.clone();
                         semaphore.acquire().await.forget();
                         tokio::spawn(async move {
-                            tcp_custom(tx, target, options).await;
+                            tcp_custom(tx, target, options, timeout).await;
                             *completed.lock().unwrap() += 1;
                             semaphore.add_permits(1);
                         });
@@ -320,11 +387,12 @@ pub fn run(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
                 let tx = tx.clone();
                 let client = client.clone();
                 let uagent = conf.user_agent.clone();
+                let timeout = conf.req_timeout;
                 let completed = completed.clone();
                 let semaphore = semaphore.clone();
                 semaphore.acquire().await.forget();
                 tokio::spawn(async move {
-                    http_s(tx, client, target, http_s_ports, uagent).await;
+                    http_s(tx, client, target, http_s_ports, uagent, timeout).await;
                     *completed.lock().unwrap() += 1;
                     semaphore.add_permits(1);
                 });
