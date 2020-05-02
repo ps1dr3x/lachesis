@@ -205,7 +205,7 @@ fn handle_worker_response(
         }
     }
 
-    stats.increment(&target.protocol, matching);
+    stats.increment_successful(&target.protocol, matching);
 
     Ok(())
 }
@@ -233,24 +233,26 @@ fn run_worker(conf: &LacConf) -> Result<(), i32> {
         };
 
         match msg {
-            WorkerMessage::LogInfo(msg) => {
-                if !conf.debug {
-                    continue;
+            WorkerMessage::Error(msg, protocol) => {
+                if conf.debug {
+                    stats.log_err(msg);
                 }
-                stats.log_info(msg);
+                stats.increment_failed(&protocol);
                 continue;
             }
-            WorkerMessage::LogErr(msg) => {
+            WorkerMessage::Timeout(msg, protocol) => {
                 stats.log_err(msg);
+                stats.increment_timedout(&protocol);
                 continue;
             }
-            WorkerMessage::Shutdown => break,
             WorkerMessage::Response(target) => {
+                stats.update_avg_time(target.time, &target.protocol);
                 if let Err(code) = handle_worker_response(conf, &mut stats, &dbm, target) {
                     return Err(code);
                 }
             }
             WorkerMessage::NextTarget => stats.increment_targets(),
+            WorkerMessage::Shutdown => break,
         };
     }
 

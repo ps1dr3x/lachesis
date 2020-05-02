@@ -23,7 +23,7 @@ use std::{
 };
 
 use crate::lachesis::LacConf;
-use WorkerMessage::{LogErr, LogInfo, NextTarget, Response, Shutdown};
+use WorkerMessage::{Error, NextTarget, Response, Shutdown, Timeout};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DatasetRecord {
@@ -40,6 +40,7 @@ pub struct Target {
     pub port: u16,
     pub protocol: String,
     pub response: String,
+    pub time: Instant,
 }
 
 impl Target {
@@ -50,6 +51,7 @@ impl Target {
             port: 0,
             protocol: String::new(),
             response: String::new(),
+            time: Instant::now(),
         }
     }
 
@@ -65,8 +67,8 @@ impl Target {
 #[derive(Debug, Clone)]
 pub enum WorkerMessage {
     Response(Target),
-    LogInfo(String),
-    LogErr(String),
+    Error(String, String),
+    Timeout(String, String),
     NextTarget,
     Shutdown,
 }
@@ -81,11 +83,11 @@ struct HttpsRequest {
     timeout: u64,
 }
 
-async fn http_s(req: HttpsRequest) -> Option<Instant> {
-    let time = Instant::now();
+async fn http_s(req: HttpsRequest) {
     let mut target = req.target.clone();
     target.protocol = req.protocol;
     target.port = req.port;
+    target.time = Instant::now();
 
     let uri: Uri = format!("{}://{}:{}", target.protocol, target.ip, target.port)
         .parse()
@@ -107,29 +109,37 @@ async fn http_s(req: HttpsRequest) -> Option<Instant> {
     {
         Ok(r) => r,
         Err(_) => {
-            req.tx.send(LogInfo(format!(
-                "[{}][{}:{}] - Request timeout",
-                target.protocol.to_uppercase().blue(),
-                target.domain.cyan(),
-                target.port.to_string().cyan(),
-            )))
-            .unwrap();
-            return None;
+            req.tx
+                .send(Timeout(
+                    format!(
+                        "[{}][{}:{}] - Request timeout",
+                        target.protocol.to_uppercase().blue(),
+                        target.domain.cyan(),
+                        target.port.to_string().cyan(),
+                    ),
+                    target.protocol,
+                ))
+                .unwrap();
+            return;
         }
     };
 
     let (parts, body) = match request {
         Ok(r) => r.into_parts(),
         Err(e) => {
-            req.tx.send(LogInfo(format!(
-                "[{}][{}:{}] - Request error: {}",
-                target.protocol.to_uppercase().blue(),
-                target.domain.cyan(),
-                target.port.to_string().cyan(),
-                e
-            )))
-            .unwrap();
-            return None;
+            req.tx
+                .send(Error(
+                    format!(
+                        "[{}][{}:{}] - Request error: {}",
+                        target.protocol.to_uppercase().blue(),
+                        target.domain.cyan(),
+                        target.port.to_string().cyan(),
+                        e
+                    ),
+                    target.protocol,
+                ))
+                .unwrap();
+            return;
         }
     };
 
@@ -141,14 +151,18 @@ async fn http_s(req: HttpsRequest) -> Option<Instant> {
     {
         Ok(a) => a,
         Err(_) => {
-            req.tx.send(LogInfo(format!(
-                "[{}][{}:{}] - Response body timeout",
-                target.protocol.to_uppercase().blue(),
-                target.domain.cyan(),
-                target.port.to_string().cyan(),
-            )))
-            .unwrap();
-            return None;
+            req.tx
+                .send(Timeout(
+                    format!(
+                        "[{}][{}:{}] - Response body timeout",
+                        target.protocol.to_uppercase().blue(),
+                        target.domain.cyan(),
+                        target.port.to_string().cyan(),
+                    ),
+                    target.protocol,
+                ))
+                .unwrap();
+            return;
         }
     };
 
@@ -164,25 +178,26 @@ async fn http_s(req: HttpsRequest) -> Option<Instant> {
                     header.1.to_str().unwrap_or("")
                 );
             }
-            raw_content =
-                format!("{}\r\n{}", raw_content, String::from_utf8_lossy(b.bytes()));
+            raw_content = format!("{}\r\n{}", raw_content, String::from_utf8_lossy(b.bytes()));
             target.response = raw_content;
 
             req.tx.send(Response(target)).unwrap();
-            Some(time)
         }
         Err(e) => {
-            req.tx.send(LogInfo(format!(
-                "[{}][{}:{}] - Response error: {}",
-                target.protocol.to_uppercase().blue(),
-                target.domain.cyan(),
-                target.port.to_string().cyan(),
-                e
-            )))
-            .unwrap();
-            None
+            req.tx
+                .send(Error(
+                    format!(
+                        "[{}][{}:{}] - Response error: {}",
+                        target.protocol.to_uppercase().blue(),
+                        target.domain.cyan(),
+                        target.port.to_string().cyan(),
+                        e
+                    ),
+                    target.protocol,
+                ))
+                .unwrap();
         }
-    }
+    };
 }
 
 struct TcpRequest {
@@ -193,24 +208,28 @@ struct TcpRequest {
     timeout: u64,
 }
 
-async fn tcp_custom(req: TcpRequest) -> Option<Instant> {
-    let time = Instant::now();
+async fn tcp_custom(req: TcpRequest) {
     let mut target = req.target.clone();
     target.domain = String::new();
     target.protocol = "tcp/custom".to_string();
     target.port = req.port;
+    target.time = Instant::now();
 
     let addr = match format!("{}:{}", target.ip, target.port).parse::<SocketAddr>() {
         Ok(addr) => addr,
         Err(_e) => {
-            req.tx.send(LogErr(format!(
-                "[{}] Invalid address: {}:{}",
-                target.protocol.to_uppercase().blue(),
-                target.ip.cyan(),
-                req.port.to_string().cyan()
-            )))
-            .unwrap();
-            return None;
+            req.tx
+                .send(Error(
+                    format!(
+                        "[{}] Invalid address: {}:{}",
+                        target.protocol.to_uppercase().blue(),
+                        target.ip.cyan(),
+                        req.port.to_string().cyan()
+                    ),
+                    target.protocol,
+                ))
+                .unwrap();
+            return;
         }
     };
 
@@ -222,29 +241,37 @@ async fn tcp_custom(req: TcpRequest) -> Option<Instant> {
     {
         Ok(s) => s,
         Err(_) => {
-            req.tx.send(LogInfo(format!(
-                "[{}][{}:{}] - Tcp connection timeout",
-                target.protocol.to_uppercase().blue(),
-                target.ip.cyan(),
-                target.port.to_string().cyan(),
-            )))
-            .unwrap();
-            return None;
+            req.tx
+                .send(Timeout(
+                    format!(
+                        "[{}][{}:{}] - Tcp connection timeout",
+                        target.protocol.to_uppercase().blue(),
+                        target.ip.cyan(),
+                        target.port.to_string().cyan(),
+                    ),
+                    target.protocol,
+                ))
+                .unwrap();
+            return;
         }
     };
 
     let mut stream = match stream {
         Ok(s) => s,
         Err(e) => {
-            req.tx.send(LogInfo(format!(
-                "[{}][{}:{}] - TCP stream connection error: {}",
-                target.protocol.to_uppercase().blue(),
-                target.ip.cyan(),
-                target.port.to_string().cyan(),
-                e
-            )))
-            .unwrap();
-            return None;
+            req.tx
+                .send(Error(
+                    format!(
+                        "[{}][{}:{}] - TCP stream connection error: {}",
+                        target.protocol.to_uppercase().blue(),
+                        target.ip.cyan(),
+                        target.port.to_string().cyan(),
+                        e
+                    ),
+                    target.protocol,
+                ))
+                .unwrap();
+            return;
         }
     };
 
@@ -256,26 +283,34 @@ async fn tcp_custom(req: TcpRequest) -> Option<Instant> {
     {
         Ok(w) => {
             if let Err(e) = w {
-                req.tx.send(LogInfo(format!(
-                    "[{}][{}:{}] - TCP stream write error: {}",
-                    target.protocol.to_uppercase().blue(),
-                    target.ip.cyan(),
-                    target.port.to_string().cyan(),
-                    e
-                )))
-                .unwrap();
-                return None;
+                req.tx
+                    .send(Error(
+                        format!(
+                            "[{}][{}:{}] - TCP stream write error: {}",
+                            target.protocol.to_uppercase().blue(),
+                            target.ip.cyan(),
+                            target.port.to_string().cyan(),
+                            e
+                        ),
+                        target.protocol,
+                    ))
+                    .unwrap();
+                return;
             }
         }
         Err(_) => {
-            req.tx.send(LogInfo(format!(
-                "[{}][{}:{}] - Tcp stream write timeout",
-                target.protocol.to_uppercase().blue(),
-                target.ip.cyan(),
-                target.port.to_string().cyan(),
-            )))
-            .unwrap();
-            return None;
+            req.tx
+                .send(Timeout(
+                    format!(
+                        "[{}][{}:{}] - Tcp stream write timeout",
+                        target.protocol.to_uppercase().blue(),
+                        target.ip.cyan(),
+                        target.port.to_string().cyan(),
+                    ),
+                    target.protocol,
+                ))
+                .unwrap();
+            return;
         }
     };
 
@@ -289,35 +324,39 @@ async fn tcp_custom(req: TcpRequest) -> Option<Instant> {
     {
         Ok(w) => {
             if let Err(e) = w {
-                req.tx.send(LogInfo(format!(
-                    "[{}][{}:{}] - TCP stream read error: {}",
-                    target.protocol.to_uppercase().blue(),
-                    target.ip.cyan(),
-                    target.port.to_string().cyan(),
-                    e
-                )))
-                .unwrap();
-                return None;
+                req.tx
+                    .send(Error(
+                        format!(
+                            "[{}][{}:{}] - TCP stream read error: {}",
+                            target.protocol.to_uppercase().blue(),
+                            target.ip.cyan(),
+                            target.port.to_string().cyan(),
+                            e
+                        ),
+                        target.protocol,
+                    ))
+                    .unwrap();
+                return;
             }
         }
         Err(_) => {
-            req.tx.send(LogInfo(format!(
-                "[{}][{}:{}] - Tcp stream read timeout",
-                target.protocol.to_uppercase().blue(),
-                target.ip.cyan(),
-                target.port.to_string().cyan(),
-            )))
-            .unwrap();
-            return None;
+            req.tx
+                .send(Timeout(
+                    format!(
+                        "[{}][{}:{}] - Tcp stream read timeout",
+                        target.protocol.to_uppercase().blue(),
+                        target.ip.cyan(),
+                        target.port.to_string().cyan(),
+                    ),
+                    target.protocol,
+                ))
+                .unwrap();
+            return;
         }
     };
 
-    if !answer.is_empty() {
-        target.response = String::from_utf8_lossy(&answer).to_string();
-        req.tx.send(Response(target)).unwrap();
-    }
-
-    Some(time)
+    target.response = String::from_utf8_lossy(&answer).to_string();
+    req.tx.send(Response(target)).unwrap();
 }
 
 fn get_next_target(conf: &LacConf) -> Option<Target> {
@@ -374,18 +413,6 @@ impl WorkerState {
     async fn wait_for_permit(&self) {
         self.semaphore.acquire().await.forget();
         self.requests.lock().unwrap().spawned += 1;
-    }
-
-    fn update_avg_time(&self, time: Instant) {
-        loop {
-            if let Ok(mut r) = self.requests.try_lock() {
-                r.avg_time = (r.avg_time * r.successful as u128
-                + time.elapsed().as_millis() as u128)
-                / (r.successful + 1) as u128;
-                r.successful += 1;
-                break;
-            }
-        }
     }
 
     fn release_permit(&self) {
@@ -460,9 +487,7 @@ pub fn run(tx: Sender<WorkerMessage>, conf: LacConf) {
                                 timeout: conf.req_timeout,
                             };
                             tokio::spawn(async move {
-                                if let Some(time) = tcp_custom(req).await {
-                                    ws.update_avg_time(time);
-                                }
+                                tcp_custom(req).await;
                                 ws.release_permit();
                             });
                         }
@@ -485,9 +510,7 @@ pub fn run(tx: Sender<WorkerMessage>, conf: LacConf) {
                             timeout: conf.req_timeout,
                         };
                         tokio::spawn(async move {
-                            if let Some(time) = http_s(req).await {
-                                ws.update_avg_time(time);
-                            }
+                            http_s(req).await;
                             ws.release_permit();
                         });
                     }
