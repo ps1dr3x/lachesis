@@ -19,7 +19,7 @@ use std::{
     net::SocketAddr,
     path::Path,
     sync::{mpsc::Sender, Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::lachesis::{LacConf, Options};
@@ -66,6 +66,7 @@ impl Target {
 struct WorkerRequests {
     spawned: u64,
     completed: u64,
+    avg_time: u128,
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +76,21 @@ struct WorkerState {
     timeout: u64,
     targets: u64,
     requests: Arc<Mutex<WorkerRequests>>,
+}
+
+impl WorkerState {
+    fn increment(&self, time: Instant) {
+        loop {
+            if let Ok(mut r) = self.requests.try_lock() {
+                r.avg_time = (r.avg_time * r.completed as u128
+                + time.elapsed().as_millis() as u128)
+                / (r.completed + 1) as u128;
+                r.completed += 1;
+                self.semaphore.add_permits(1);
+                break;
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -375,6 +391,7 @@ pub fn run(tx: Sender<WorkerMessage>, conf: LacConf) {
             requests: Arc::new(Mutex::new(WorkerRequests {
                 spawned: 0,
                 completed: 0,
+                avg_time: 0,
             })),
         };
 
@@ -420,9 +437,10 @@ pub fn run(tx: Sender<WorkerMessage>, conf: LacConf) {
                         ws.semaphore.acquire().await.forget();
                         tokio::spawn(async move {
                             ws.requests.lock().unwrap().spawned += 1;
-                            tcp_custom(ws.tx, target, options, ws.timeout).await;
-                            ws.requests.lock().unwrap().completed += 1;
-                            ws.semaphore.add_permits(1);
+                            let tx = ws.tx.clone();
+                            let time = Instant::now();
+                            tcp_custom(tx, target, options, ws.timeout).await;
+                            ws.increment(time);
                         });
                     }
                     _ => (),
@@ -435,8 +453,10 @@ pub fn run(tx: Sender<WorkerMessage>, conf: LacConf) {
                 ws.semaphore.acquire().await.forget();
                 tokio::spawn(async move {
                     ws.requests.lock().unwrap().spawned += 1;
+                    let tx = ws.tx.clone();
+                    let time = Instant::now();
                     http_s(
-                        ws.tx,
+                        tx,
                         https_client,
                         target,
                         http_s_ports,
@@ -444,8 +464,7 @@ pub fn run(tx: Sender<WorkerMessage>, conf: LacConf) {
                         ws.timeout,
                     )
                     .await;
-                    ws.requests.lock().unwrap().completed += 1;
-                    ws.semaphore.add_permits(1);
+                    ws.increment(time);
                 });
             }
 
