@@ -241,7 +241,9 @@ fn run_worker(conf: &LacConf) -> Result<(), i32> {
                 continue;
             }
             WorkerMessage::Timeout(msg, protocol) => {
-                stats.log_err(msg);
+                if conf.debug {
+                    stats.log_err(msg);
+                }
                 stats.increment_timedout(&protocol);
                 continue;
             }
