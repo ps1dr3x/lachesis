@@ -18,7 +18,7 @@ use std::{
     fs::File,
     net::SocketAddr,
     path::Path,
-    sync::{mpsc, Arc, Mutex},
+    sync::{mpsc::Sender, Arc, Mutex},
     time::Duration,
 };
 
@@ -63,6 +63,21 @@ impl Target {
 }
 
 #[derive(Debug, Clone)]
+struct WorkerRequests {
+    spawned: u64,
+    completed: u64,
+}
+
+#[derive(Debug, Clone)]
+struct WorkerState {
+    tx: Sender<WorkerMessage>,
+    semaphore: Arc<Semaphore>,
+    timeout: u64,
+    targets: u64,
+    requests: Arc<Mutex<WorkerRequests>>,
+}
+
+#[derive(Debug, Clone)]
 pub enum WorkerMessage {
     Response(Target),
     LogInfo(String),
@@ -72,7 +87,7 @@ pub enum WorkerMessage {
 }
 
 async fn http_s(
-    tx: mpsc::Sender<WorkerMessage>,
+    tx: Sender<WorkerMessage>,
     client: Client<HttpsConnector<HttpConnector>>,
     target: Target,
     ports: HashSet<u16>,
@@ -97,7 +112,12 @@ async fn http_s(
                 .body(Body::empty())
                 .unwrap();
 
-            let request = match timeout(Duration::from_secs(req_timeout / 2), client.request(request)).await {
+            let request = match timeout(
+                Duration::from_secs(req_timeout / 2),
+                client.request(request),
+            )
+            .await
+            {
                 Ok(r) => r,
                 Err(_) => {
                     tx.send(LogInfo(format!(
@@ -126,7 +146,12 @@ async fn http_s(
                 }
             };
 
-            let body = match timeout(Duration::from_secs(req_timeout / 2), hyper::body::aggregate(body)).await {
+            let body = match timeout(
+                Duration::from_secs(req_timeout / 2),
+                hyper::body::aggregate(body),
+            )
+            .await
+            {
                 Ok(a) => a,
                 Err(_) => {
                     tx.send(LogInfo(format!(
@@ -143,8 +168,7 @@ async fn http_s(
             match body {
                 Ok(b) => {
                     // Merge response's headers and body
-                    let mut raw_content =
-                        format!("{:?} {}\r\n", parts.version, parts.status);
+                    let mut raw_content = format!("{:?} {}\r\n", parts.version, parts.status);
                     for header in &parts.headers {
                         raw_content = format!(
                             "{}{}: {}\r\n",
@@ -153,11 +177,8 @@ async fn http_s(
                             header.1.to_str().unwrap_or("")
                         );
                     }
-                    raw_content = format!(
-                        "{}\r\n{}",
-                        raw_content,
-                        String::from_utf8_lossy(b.bytes())
-                    );
+                    raw_content =
+                        format!("{}\r\n{}", raw_content, String::from_utf8_lossy(b.bytes()));
                     target.response = raw_content;
 
                     tx.send(Response(target)).unwrap();
@@ -177,7 +198,7 @@ async fn http_s(
     }
 }
 
-async fn tcp_custom(tx: mpsc::Sender<WorkerMessage>, target: Target, options: Options, req_timeout: u64) {
+async fn tcp_custom(tx: Sender<WorkerMessage>, target: Target, options: Options, req_timeout: u64) {
     for port in &options.ports {
         let mut target = target.clone();
         target.domain = String::new();
@@ -198,7 +219,12 @@ async fn tcp_custom(tx: mpsc::Sender<WorkerMessage>, target: Target, options: Op
             }
         };
 
-        let stream = match timeout(Duration::from_secs(req_timeout / 3), TcpStream::connect(&addr)).await {
+        let stream = match timeout(
+            Duration::from_secs(req_timeout / 3),
+            TcpStream::connect(&addr),
+        )
+        .await
+        {
             Ok(s) => s,
             Err(_) => {
                 tx.send(LogInfo(format!(
@@ -227,7 +253,12 @@ async fn tcp_custom(tx: mpsc::Sender<WorkerMessage>, target: Target, options: Op
             }
         };
 
-        match timeout(Duration::from_secs(req_timeout / 3), stream.write_all(options.message.clone().unwrap().as_bytes())).await {
+        match timeout(
+            Duration::from_secs(req_timeout / 3),
+            stream.write_all(options.message.clone().unwrap().as_bytes()),
+        )
+        .await
+        {
             Ok(w) => {
                 if let Err(e) = w {
                     tx.send(LogInfo(format!(
@@ -255,7 +286,12 @@ async fn tcp_custom(tx: mpsc::Sender<WorkerMessage>, target: Target, options: Op
 
         // FIXME - find a better way to read the answer
         let mut answer = [0; 100_000];
-        match timeout(Duration::from_secs(req_timeout / 3), stream.read(&mut answer)).await {
+        match timeout(
+            Duration::from_secs(req_timeout / 3),
+            stream.read(&mut answer),
+        )
+        .await
+        {
             Ok(w) => {
                 if let Err(e) = w {
                     tx.send(LogInfo(format!(
@@ -323,7 +359,7 @@ fn get_next_target(conf: &LacConf) -> Option<Target> {
     }
 }
 
-pub fn run(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
+pub fn run(tx: Sender<WorkerMessage>, conf: LacConf) {
     let mut rt = runtime::Builder::new()
         .threaded_scheduler()
         .enable_all()
@@ -331,25 +367,36 @@ pub fn run(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
         .unwrap();
 
     rt.block_on(async {
+        let mut ws = WorkerState {
+            tx,
+            semaphore: Arc::new(Semaphore::new(500)),
+            timeout: conf.req_timeout,
+            targets: 0,
+            requests: Arc::new(Mutex::new(WorkerRequests {
+                spawned: 0,
+                completed: 0,
+            })),
+        };
+
+        // TODOs:
+        // - Tweak connectors and client configuration
+        // - Try using rustls instead of native_tls as TLS connector
         let mut http = HttpConnector::new();
         //http.set_connect_timeout(Some(Duration::from_millis(1000)));
         http.enforce_http(false);
-        let connector = native_tls::TlsConnector::builder()
+        let tls_connector = native_tls::TlsConnector::builder()
             .danger_accept_invalid_certs(true)
             .build()
             .unwrap();
-        let connector = TlsConnector::from(connector);
-        let https = HttpsConnector::from((http, connector));
-        let client = Client::builder()
+        let tls_connector = TlsConnector::from(tls_connector);
+        let https = HttpsConnector::from((http, tls_connector));
+        let https_client = Client::builder()
             //.pool_idle_timeout(Duration::from_millis(1250))
             //.http2_keep_alive_timeout(Duration::from_millis(1000))
             //.retry_canceled_requests(false)
             .build(https);
 
-        let semaphore = Arc::new(Semaphore::new(500));
-        let mut targets = 0;
-        let completed = Arc::new(Mutex::new(0));
-        while conf.max_targets == 0 || targets < conf.max_targets {
+        while conf.max_targets == 0 || ws.targets < conf.max_targets {
             let target = if let Some(target) = get_next_target(&conf) {
                 target
             } else {
@@ -367,45 +414,53 @@ pub fn run(tx: mpsc::Sender<WorkerMessage>, conf: LacConf) {
                         }
                     }
                     "tcp/custom" => {
-                        let tx = tx.clone();
                         let target = target.clone();
                         let options = def.options.clone();
-                        let timeout = conf.req_timeout;
-                        let completed = completed.clone();
-                        let semaphore = semaphore.clone();
-                        semaphore.acquire().await.forget();
+                        let ws = ws.clone();
+                        ws.semaphore.acquire().await.forget();
                         tokio::spawn(async move {
-                            tcp_custom(tx, target, options, timeout).await;
-                            *completed.lock().unwrap() += 1;
-                            semaphore.add_permits(1);
+                            ws.requests.lock().unwrap().spawned += 1;
+                            tcp_custom(ws.tx, target, options, ws.timeout).await;
+                            ws.requests.lock().unwrap().completed += 1;
+                            ws.semaphore.add_permits(1);
                         });
                     }
                     _ => (),
                 }
             }
             if !http_s_ports.is_empty() {
-                let tx = tx.clone();
-                let client = client.clone();
                 let uagent = conf.user_agent.clone();
-                let timeout = conf.req_timeout;
-                let completed = completed.clone();
-                let semaphore = semaphore.clone();
-                semaphore.acquire().await.forget();
+                let https_client = https_client.clone();
+                let ws = ws.clone();
+                ws.semaphore.acquire().await.forget();
                 tokio::spawn(async move {
-                    http_s(tx, client, target, http_s_ports, uagent, timeout).await;
-                    *completed.lock().unwrap() += 1;
-                    semaphore.add_permits(1);
+                    ws.requests.lock().unwrap().spawned += 1;
+                    http_s(
+                        ws.tx,
+                        https_client,
+                        target,
+                        http_s_ports,
+                        uagent,
+                        ws.timeout,
+                    )
+                    .await;
+                    ws.requests.lock().unwrap().completed += 1;
+                    ws.semaphore.add_permits(1);
                 });
             }
 
-            targets += 1;
-            tx.send(NextTarget).unwrap();
+            ws.targets += 1;
+            ws.tx.send(NextTarget).unwrap();
         }
 
-        while *completed.lock().unwrap() < conf.max_targets {
-            // Wait for existing connections to complete
+        // Wait for existing connections to complete
+        loop {
+            let reqs = ws.requests.lock().unwrap();
+            if reqs.completed == reqs.spawned {
+                break;
+            }
         }
 
-        tx.send(Shutdown).unwrap();
+        ws.tx.send(Shutdown).unwrap();
     });
 }
