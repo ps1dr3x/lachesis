@@ -1,4 +1,4 @@
-#![feature(proc_macro_hygiene, decl_macro)]
+#![feature(try_trait, termination_trait_lib, proc_macro_hygiene, decl_macro)]
 
 #[macro_use]
 extern crate clap;
@@ -7,6 +7,7 @@ extern crate validator_derive;
 #[macro_use]
 extern crate rocket;
 
+mod conf;
 mod db;
 mod detector;
 mod lachesis;
@@ -15,12 +16,13 @@ mod utils;
 mod validators;
 mod web;
 mod worker;
+mod browser;
 
-use colored::Colorize;
-use std::process;
 use unindent::unindent;
 
-fn logo() {
+use crate::lachesis::ExitCode;
+
+fn main() -> ExitCode {
     println!(
         "{}",
         unindent(
@@ -38,26 +40,6 @@ fn logo() {
     "
         )
     );
-}
 
-fn run_lachesis() -> Result<(), i32> {
-    logo();
-
-    // Get & check cli parameters
-    let conf = match utils::get_conf() {
-        Ok(conf) => conf,
-        Err(err) => {
-            println!("\n[{}] {}", "ERROR".red(), err);
-            return Err(1);
-        }
-    };
-
-    lachesis::run(&conf)
-}
-
-fn main() {
-    process::exit(match run_lachesis() {
-        Ok(_) => 0,
-        Err(exit_code) => exit_code,
-    });
+    lachesis::run()
 }

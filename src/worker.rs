@@ -1,3 +1,12 @@
+use std::{
+    collections::HashSet,
+    fs::File,
+    net::SocketAddr,
+    path::Path,
+    sync::{mpsc::Sender, Arc, Mutex},
+    time::{Duration, Instant},
+};
+
 use bytes::Buf;
 use colored::Colorize;
 use easy_reader::EasyReader;
@@ -13,16 +22,8 @@ use tokio::{
 };
 use tokio_tls::TlsConnector;
 
-use std::{
-    collections::HashSet,
-    fs::File,
-    net::SocketAddr,
-    path::Path,
-    sync::{mpsc::Sender, Arc, Mutex},
-    time::{Duration, Instant},
-};
+use crate::conf::Conf;
 
-use crate::lachesis::LacConf;
 use WorkerMessage::{Error, NextTarget, Response, Shutdown, Timeout};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -359,7 +360,7 @@ async fn tcp_custom(req: TcpRequest) {
     req.tx.send(Response(target)).unwrap();
 }
 
-fn get_next_target(conf: &LacConf) -> Option<Target> {
+fn get_next_target(conf: &Conf) -> Option<Target> {
     if !conf.dataset.is_empty() {
         // If dataset mode, pick a random dns record
         // (excluding records which are not of type A)
@@ -421,7 +422,7 @@ impl WorkerState {
     }
 }
 
-pub fn run(tx: Sender<WorkerMessage>, conf: LacConf) {
+pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
     let mut rt = runtime::Builder::new()
         .threaded_scheduler()
         .enable_all()

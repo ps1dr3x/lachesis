@@ -1,7 +1,8 @@
-use crate::lachesis::{Definition, RegexVersion};
 use regex::Regex;
 use semver::Version;
 use validator::ValidationError;
+
+use crate::conf::{Definition, RegexVersion};
 
 pub fn validate_protocol(protocol: &str) -> Result<(), ValidationError> {
     match protocol {
