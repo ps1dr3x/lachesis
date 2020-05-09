@@ -1,26 +1,24 @@
 use std::{
+    fmt::Debug,
+    process::Termination,
     sync::{
         mpsc,
         mpsc::{channel, Receiver, Sender},
     },
     thread,
-    fmt::Debug, process::Termination,
 };
 
 use colored::Colorize;
 
 use crate::{
-    conf::{
-        self,
-        Conf,
-    },
+    browser,
+    conf::{self, Conf},
     db::DbMan,
     detector,
     stats::Stats,
     utils::format_host,
     web::{self, UIMessage},
     worker::{self, Target, WorkerMessage},
-    browser,
 };
 
 #[derive(Debug, PartialEq)]
@@ -38,12 +36,7 @@ impl Termination for ExitCode {
     }
 }
 
-fn handle_worker_response(
-    conf: &Conf,
-    stats: &mut Stats,
-    dbm: &DbMan,
-    target: Target,
-) -> ExitCode {
+fn handle_worker_response(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target: Target) -> ExitCode {
     stats.log_info(format!(
         "[{}][{}:{}] Received a response. Length: {}",
         target.protocol.to_uppercase().blue(),
@@ -139,7 +132,7 @@ fn run_worker(conf: &Conf) -> ExitCode {
     };
 
     stats.finish();
-    
+
     ExitCode::Ok
 }
 

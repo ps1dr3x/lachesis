@@ -7,6 +7,7 @@ extern crate validator_derive;
 #[macro_use]
 extern crate rocket;
 
+mod browser;
 mod conf;
 mod db;
 mod detector;
@@ -16,7 +17,6 @@ mod utils;
 mod validators;
 mod web;
 mod worker;
-mod browser;
 
 use unindent::unindent;
 

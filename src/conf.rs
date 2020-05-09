@@ -5,9 +5,9 @@ use std::{
 };
 
 use clap::App;
-use ipnet::{Ipv4Net, Ipv4AddrRange};
-use validator::Validate;
+use ipnet::{Ipv4AddrRange, Ipv4Net};
 use serde_derive::{Deserialize, Serialize};
+use validator::Validate;
 
 use crate::validators::{
     validate_definition, validate_protocol, validate_regex, validate_regex_ver, validate_semver,

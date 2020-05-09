@@ -2,11 +2,7 @@ use colored::Colorize;
 use regex::Regex;
 use semver::Version;
 
-use crate::{
-    utils::format_host,
-    worker::Target,
-    conf::Definition,
-};
+use crate::{conf::Definition, utils::format_host, worker::Target};
 
 #[derive(Clone, Debug)]
 pub struct DetectorResponse {
