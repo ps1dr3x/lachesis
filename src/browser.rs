@@ -37,17 +37,15 @@ pub fn maybe_take_screenshot(target: &Target, id: String) {
             },
             target.port
         );
-        match tab.navigate_to(&host) {
-            Ok(tab) => {
-                thread::sleep(time::Duration::from_secs(30));
-                let jpeg_data = tab
-                    .capture_screenshot(ScreenshotFormat::JPEG(Some(75)), None, true)
-                    .unwrap();
-                let mut file =
-                    File::create(Path::new("data/screenshots/").join(&(id + ".jpg"))).unwrap();
-                file.write_all(&jpeg_data).unwrap();
-            }
-            Err(_) => {}
-        };
+
+        if let Ok(tab) = tab.navigate_to(&host) {
+            thread::sleep(time::Duration::from_secs(30));
+            let jpeg_data = tab
+                .capture_screenshot(ScreenshotFormat::JPEG(Some(75)), None, true)
+                .unwrap();
+            let mut file =
+                File::create(Path::new("data/screenshots/").join(&(id + ".jpg"))).unwrap();
+            file.write_all(&jpeg_data).unwrap();
+        }
     });
 }

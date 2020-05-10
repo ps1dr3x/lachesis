@@ -12,6 +12,7 @@ mod conf;
 mod db;
 mod detector;
 mod lachesis;
+mod net;
 mod stats;
 mod utils;
 mod validators;
