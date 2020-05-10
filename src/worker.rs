@@ -184,12 +184,18 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
                     }
                     "tcp/custom" => {
                         for port in &def.options.ports {
-                            ws.wait_for_permit().await;
                             let ws = ws.clone();
+                            ws.wait_for_permit().await;
+
+                            let mut target = target.clone();
+                            target.domain = String::new();
+                            target.protocol = "tcp/custom".to_string();
+                            target.port = *port;
+                            target.time = Instant::now();
+
                             let req = TcpRequest {
                                 tx: tx.clone(),
                                 target: target.clone(),
-                                port: *port,
                                 message: def.options.message.clone().unwrap(),
                                 timeout: conf.req_timeout,
                             };
@@ -205,14 +211,18 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
             if !http_s_ports.is_empty() {
                 for protocol in ["https", "http"].iter() {
                     for port in &http_s_ports {
-                        ws.wait_for_permit().await;
                         let ws = ws.clone();
+                        ws.wait_for_permit().await;
+
+                        let mut target = target.clone();
+                        target.protocol = protocol.to_string();
+                        target.port = *port;
+                        target.time = Instant::now();
+
                         let req = HttpsRequest {
                             tx: tx.clone(),
                             client: https_client.clone(),
                             target: target.clone(),
-                            protocol: protocol.to_string(),
-                            port: *port,
                             user_agent: conf.user_agent.clone(),
                             timeout: conf.req_timeout,
                         };
