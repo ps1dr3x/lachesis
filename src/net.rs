@@ -1,8 +1,4 @@
-use std::{
-    net::SocketAddr,
-    sync::mpsc::Sender,
-    time::Duration,
-};
+use std::{net::SocketAddr, sync::mpsc::Sender, time::Duration};
 
 use bytes::Buf;
 use colored::Colorize;
@@ -16,6 +12,18 @@ use tokio::{
 
 use super::worker::{Target, WorkerMessage};
 
+pub async fn test_port(ip: String, port: u16) -> bool {
+    let addr = match format!("{}:{}", ip, port).parse::<SocketAddr>() {
+        Ok(addr) => addr,
+        Err(_) => return false,
+    };
+
+    match timeout(Duration::from_secs(3), TcpStream::connect(&addr)).await {
+        Ok(s) => s.is_ok(),
+        Err(_) => false,
+    }
+}
+
 pub struct HttpsRequest {
     pub tx: Sender<WorkerMessage>,
     pub client: Client<HttpsConnector<HttpConnector>>,
@@ -27,9 +35,12 @@ pub struct HttpsRequest {
 pub async fn http_s(req: HttpsRequest) {
     let mut req = req;
 
-    let uri: Uri = format!("{}://{}:{}", req.target.protocol, req.target.ip, req.target.port)
-        .parse()
-        .unwrap();
+    let uri: Uri = format!(
+        "{}://{}:{}",
+        req.target.protocol, req.target.ip, req.target.port
+    )
+    .parse()
+    .unwrap();
 
     let request = Request::builder()
         .uri(uri)

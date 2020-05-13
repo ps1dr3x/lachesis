@@ -7,6 +7,7 @@ use std::{
 };
 
 use easy_reader::EasyReader;
+use futures::{stream::FuturesUnordered, StreamExt};
 use hyper::{client::HttpConnector, Client};
 use hyper_tls::HttpsConnector;
 use serde_derive::{Deserialize, Serialize};
@@ -14,7 +15,7 @@ use tokio::{runtime, sync::Semaphore};
 use tokio_tls::TlsConnector;
 
 use crate::{
-    conf::Conf,
+    conf::{Conf, Definition},
     net::{self, HttpsRequest, TcpRequest},
 };
 
@@ -101,6 +102,41 @@ fn get_next_target(conf: &Conf) -> Option<Target> {
     }
 }
 
+async fn check_ports(ws: WorkerState, defs: &[Definition], ip: String) -> HashSet<u16> {
+    let mut unique_ports = HashSet::new();
+
+    for def in defs {
+        for port in &def.options.ports {
+            unique_ports.insert(*port);
+        }
+    }
+
+    let open_ports = Arc::new(Mutex::new(unique_ports.clone()));
+    let mut futs = FuturesUnordered::new();
+    for port in unique_ports {
+        let ws = ws.clone();
+        let ip = ip.clone();
+        let open_ports = open_ports.clone();
+        futs.push(async move {
+            ws.wait_for_permit().await;
+            if !net::test_port(ip.clone(), port).await {
+                open_ports.lock().unwrap().remove(&port);
+            }
+            ws.release_permit();
+        });
+    }
+
+    let now = Instant::now();
+    loop {
+        if futs.next().await.is_none() {
+            break;
+        }
+    }
+    println!("ip: {} elapsed: {}", ip, now.elapsed().as_millis());
+
+    Arc::try_unwrap(open_ports).unwrap().into_inner().unwrap()
+}
+
 #[derive(Debug, Clone)]
 struct WorkerRequests {
     spawned: u64,
@@ -173,69 +209,80 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
                 break;
             };
 
-            let mut http_s_ports = HashSet::new();
-            for def in &conf.definitions {
-                match def.protocol.as_str() {
-                    "http/s" => {
-                        // Only one http/s request per port
-                        for port in &def.options.ports {
-                            http_s_ports.insert(*port);
+            let ws_in = ws.clone();
+            let conf = conf.clone();
+            let tx = tx.clone();
+            let https_client = https_client.clone();
+            tokio::spawn(async move {
+                let open_ports =
+                    check_ports(ws_in.clone(), &conf.definitions, target.ip.clone()).await;
+                println!("ip: {} open ports: {:?}", target.ip, open_ports);
+
+                let mut http_s_ports = HashSet::new();
+                for def in &conf.definitions {
+                    match def.protocol.as_str() {
+                        "http/s" => {
+                            // Only one http/s request per port
+                            for port in &def.options.ports {
+                                if open_ports.contains(port) {
+                                    http_s_ports.insert(*port);
+                                }
+                            }
                         }
+                        "tcp/custom" => {
+                            for port in &def.options.ports {
+                                if !open_ports.contains(port) {
+                                    continue;
+                                }
+
+                                ws_in.wait_for_permit().await;
+
+                                let mut target = target.clone();
+                                target.domain = String::new();
+                                target.protocol = "tcp/custom".to_string();
+                                target.port = *port;
+                                target.time = Instant::now();
+
+                                let req = TcpRequest {
+                                    tx: tx.clone(),
+                                    target: target.clone(),
+                                    message: def.options.message.clone().unwrap(),
+                                    timeout: conf.req_timeout,
+                                };
+                                net::tcp_custom(req).await;
+                                ws_in.release_permit();
+                            }
+                        }
+                        // Protocol field is already validated when conf is loaded
+                        _ => (),
                     }
-                    "tcp/custom" => {
-                        for port in &def.options.ports {
-                            let ws = ws.clone();
-                            ws.wait_for_permit().await;
+                }
+                if !http_s_ports.is_empty() {
+                    for protocol in ["https", "http"].iter() {
+                        for port in &http_s_ports {
+                            ws_in.wait_for_permit().await;
 
                             let mut target = target.clone();
-                            target.domain = String::new();
-                            target.protocol = "tcp/custom".to_string();
+                            target.protocol = protocol.to_string();
                             target.port = *port;
                             target.time = Instant::now();
 
-                            let req = TcpRequest {
+                            let req = HttpsRequest {
                                 tx: tx.clone(),
+                                client: https_client.clone(),
                                 target: target.clone(),
-                                message: def.options.message.clone().unwrap(),
+                                user_agent: conf.user_agent.clone(),
                                 timeout: conf.req_timeout,
                             };
-                            tokio::spawn(async move {
-                                net::tcp_custom(req).await;
-                                ws.release_permit();
-                            });
+                            net::http_s(req).await;
+                            ws_in.release_permit();
                         }
                     }
-                    _ => (),
                 }
-            }
-            if !http_s_ports.is_empty() {
-                for protocol in ["https", "http"].iter() {
-                    for port in &http_s_ports {
-                        let ws = ws.clone();
-                        ws.wait_for_permit().await;
-
-                        let mut target = target.clone();
-                        target.protocol = protocol.to_string();
-                        target.port = *port;
-                        target.time = Instant::now();
-
-                        let req = HttpsRequest {
-                            tx: tx.clone(),
-                            client: https_client.clone(),
-                            target: target.clone(),
-                            user_agent: conf.user_agent.clone(),
-                            timeout: conf.req_timeout,
-                        };
-                        tokio::spawn(async move {
-                            net::http_s(req).await;
-                            ws.release_permit();
-                        });
-                    }
-                }
-            }
+                tx.send(WorkerMessage::NextTarget).unwrap();
+            });
 
             ws.targets += 1;
-            tx.send(WorkerMessage::NextTarget).unwrap();
         }
 
         // Wait for existing connections to complete
