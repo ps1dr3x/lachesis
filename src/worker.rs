@@ -58,15 +58,6 @@ impl Target {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum WorkerMessage {
-    Response(Target),
-    Error(String, String),
-    Timeout(String, String),
-    NextTarget,
-    Shutdown,
-}
-
 fn get_next_target(conf: &Conf) -> Option<Target> {
     if !conf.dataset.is_empty() {
         // If dataset mode, pick a random dns record
@@ -119,37 +110,82 @@ async fn check_ports(ws: WorkerState, defs: &[Definition], ip: String) -> HashSe
         let open_ports = open_ports.clone();
         futs.push(async move {
             ws.wait_for_permit().await;
-            if !net::test_port(ip.clone(), port).await {
+
+            let now = Instant::now();
+            let timeout = ws.probe_time.lock().unwrap().timeout;
+            if !net::test_port(ip.clone(), port, timeout as u64).await {
                 open_ports.lock().unwrap().remove(&port);
             }
+            // Timeout estimation formula from nmap
+            // nmap.org/book/port-scanning-algorithms.html
+            let rtt = now.elapsed().as_millis() as f32;
+            let mut pt = ws.probe_time.lock().unwrap();
+            let newsrtt = pt.srtt + (rtt - pt.srtt) / 8.0;
+            let newrttvar = pt.rttvar + (f32::abs(rtt - pt.srtt) - pt.rttvar) / 4.0;
+            pt.timeout = newsrtt + newrttvar * 4.0;
+
             ws.release_permit();
         });
     }
 
-    let now = Instant::now();
     loop {
         if futs.next().await.is_none() {
             break;
         }
     }
-    println!("ip: {} elapsed: {}", ip, now.elapsed().as_millis());
 
     Arc::try_unwrap(open_ports).unwrap().into_inner().unwrap()
+}
+
+fn build_https_client() -> Client<HttpsConnector<HttpConnector>> {
+    // TODOs:
+    // - Tweak connectors and client configuration
+    // - Try using rustls instead of native_tls as TLS connector
+    let mut http = HttpConnector::new();
+    //http.set_connect_timeout(Some(Duration::from_millis(1000)));
+    http.enforce_http(false);
+    let tls_connector = native_tls::TlsConnector::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap();
+    let tls_connector = TlsConnector::from(tls_connector);
+    let https = HttpsConnector::from((http, tls_connector));
+    Client::builder()
+        //.pool_idle_timeout(Duration::from_millis(1250))
+        //.http2_keep_alive_timeout(Duration::from_millis(1000))
+        //.retry_canceled_requests(false)
+        .build(https)
+}
+
+#[derive(Debug, Clone)]
+pub enum WorkerMessage {
+    Response(Target),
+    Error(String, String),
+    Timeout(String, String),
+    NextTarget,
+    Shutdown,
+}
+
+#[derive(Debug, Clone)]
+struct WorkerProbeTime {
+    srtt: f32,
+    rttvar: f32,
+    timeout: f32,
 }
 
 #[derive(Debug, Clone)]
 struct WorkerRequests {
     spawned: u64,
     completed: u64,
-    successful: u64,
-    avg_time: u128,
 }
 
 #[derive(Debug, Clone)]
 struct WorkerState {
+    conf: Conf,
+    https_client: Client<HttpsConnector<HttpConnector>>,
     semaphore: Arc<Semaphore>,
-    targets: u64,
     requests: Arc<Mutex<WorkerRequests>>,
+    probe_time: Arc<Mutex<WorkerProbeTime>>,
 }
 
 impl WorkerState {
@@ -172,37 +208,24 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
         .unwrap();
 
     rt.block_on(async {
-        let mut ws = WorkerState {
+        let ws = WorkerState {
+            conf,
+            https_client: build_https_client(),
             semaphore: Arc::new(Semaphore::new(500)),
-            targets: 0,
             requests: Arc::new(Mutex::new(WorkerRequests {
                 spawned: 0,
                 completed: 0,
-                successful: 0,
-                avg_time: 0,
+            })),
+            probe_time: Arc::new(Mutex::new(WorkerProbeTime {
+                srtt: 0.0,
+                rttvar: 0.0,
+                timeout: 3000.0,
             })),
         };
 
-        // TODOs:
-        // - Tweak connectors and client configuration
-        // - Try using rustls instead of native_tls as TLS connector
-        let mut http = HttpConnector::new();
-        //http.set_connect_timeout(Some(Duration::from_millis(1000)));
-        http.enforce_http(false);
-        let tls_connector = native_tls::TlsConnector::builder()
-            .danger_accept_invalid_certs(true)
-            .build()
-            .unwrap();
-        let tls_connector = TlsConnector::from(tls_connector);
-        let https = HttpsConnector::from((http, tls_connector));
-        let https_client = Client::builder()
-            //.pool_idle_timeout(Duration::from_millis(1250))
-            //.http2_keep_alive_timeout(Duration::from_millis(1000))
-            //.retry_canceled_requests(false)
-            .build(https);
-
-        while conf.max_targets == 0 || ws.targets < conf.max_targets {
-            let target = if let Some(target) = get_next_target(&conf) {
+        let mut targets = 0;
+        while ws.conf.max_targets == 0 || targets < ws.conf.max_targets {
+            let target = if let Some(target) = get_next_target(&ws.conf) {
                 target
             } else {
                 // All the targets have been consumed
@@ -210,16 +233,14 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
             };
 
             let ws_in = ws.clone();
-            let conf = conf.clone();
             let tx = tx.clone();
-            let https_client = https_client.clone();
             tokio::spawn(async move {
                 let open_ports =
-                    check_ports(ws_in.clone(), &conf.definitions, target.ip.clone()).await;
+                    check_ports(ws_in.clone(), &ws_in.conf.definitions, target.ip.clone()).await;
                 println!("ip: {} open ports: {:?}", target.ip, open_ports);
 
                 let mut http_s_ports = HashSet::new();
-                for def in &conf.definitions {
+                for def in &ws_in.conf.definitions {
                     match def.protocol.as_str() {
                         "http/s" => {
                             // Only one http/s request per port
@@ -247,7 +268,7 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
                                     tx: tx.clone(),
                                     target: target.clone(),
                                     message: def.options.message.clone().unwrap(),
-                                    timeout: conf.req_timeout,
+                                    timeout: ws_in.conf.req_timeout,
                                 };
                                 net::tcp_custom(req).await;
                                 ws_in.release_permit();
@@ -269,10 +290,10 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
 
                             let req = HttpsRequest {
                                 tx: tx.clone(),
-                                client: https_client.clone(),
+                                client: ws_in.https_client.clone(),
                                 target: target.clone(),
-                                user_agent: conf.user_agent.clone(),
-                                timeout: conf.req_timeout,
+                                user_agent: ws_in.conf.user_agent.clone(),
+                                timeout: ws_in.conf.req_timeout,
                             };
                             net::http_s(req).await;
                             ws_in.release_permit();
@@ -282,7 +303,7 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
                 tx.send(WorkerMessage::NextTarget).unwrap();
             });
 
-            ws.targets += 1;
+            targets += 1;
         }
 
         // Wait for existing connections to complete

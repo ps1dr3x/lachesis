@@ -12,13 +12,13 @@ use tokio::{
 
 use super::worker::{Target, WorkerMessage};
 
-pub async fn test_port(ip: String, port: u16) -> bool {
+pub async fn test_port(ip: String, port: u16, timeout_millis: u64) -> bool {
     let addr = match format!("{}:{}", ip, port).parse::<SocketAddr>() {
         Ok(addr) => addr,
         Err(_) => return false,
     };
 
-    match timeout(Duration::from_secs(3), TcpStream::connect(&addr)).await {
+    match timeout(Duration::from_millis(timeout_millis), TcpStream::connect(&addr)).await {
         Ok(s) => s.is_ok(),
         Err(_) => false,
     }
