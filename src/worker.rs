@@ -189,6 +189,23 @@ struct WorkerState {
 }
 
 impl WorkerState {
+    fn new(conf: Conf, https_client: Client<HttpsConnector<HttpConnector>>) -> Self {
+        Self {
+            conf,
+            https_client,
+            semaphore: Arc::new(Semaphore::new(500)),
+            requests: Arc::new(Mutex::new(WorkerRequests {
+                spawned: 0,
+                completed: 0,
+            })),
+            probe_time: Arc::new(Mutex::new(WorkerProbeTime {
+                srtt: 0.0,
+                rttvar: 0.0,
+                timeout: 3000.0,
+            })),
+        }
+    }
+
     async fn wait_for_permit(&self) {
         self.semaphore.acquire().await.forget();
         self.requests.lock().unwrap().spawned += 1;
@@ -208,20 +225,7 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
         .unwrap();
 
     rt.block_on(async {
-        let ws = WorkerState {
-            conf,
-            https_client: build_https_client(),
-            semaphore: Arc::new(Semaphore::new(500)),
-            requests: Arc::new(Mutex::new(WorkerRequests {
-                spawned: 0,
-                completed: 0,
-            })),
-            probe_time: Arc::new(Mutex::new(WorkerProbeTime {
-                srtt: 0.0,
-                rttvar: 0.0,
-                timeout: 3000.0,
-            })),
-        };
+        let ws = WorkerState::new(conf, build_https_client());
 
         let mut targets = 0;
         while ws.conf.max_targets == 0 || targets < ws.conf.max_targets {
@@ -237,7 +241,6 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
             tokio::spawn(async move {
                 let open_ports =
                     check_ports(ws_in.clone(), &ws_in.conf.definitions, target.ip.clone()).await;
-                println!("ip: {} open ports: {:?}", target.ip, open_ports);
 
                 let mut http_s_ports = HashSet::new();
                 for def in &ws_in.conf.definitions {
@@ -271,6 +274,7 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
                                     timeout: ws_in.conf.req_timeout,
                                 };
                                 net::tcp_custom(req).await;
+
                                 ws_in.release_permit();
                             }
                         }
@@ -296,6 +300,7 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
                                 timeout: ws_in.conf.req_timeout,
                             };
                             net::http_s(req).await;
+
                             ws_in.release_permit();
                         }
                     }
