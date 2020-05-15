@@ -18,7 +18,12 @@ pub async fn test_port(ip: String, port: u16, timeout_millis: u64) -> bool {
         Err(_) => return false,
     };
 
-    match timeout(Duration::from_millis(timeout_millis), TcpStream::connect(&addr)).await {
+    match timeout(
+        Duration::from_millis(timeout_millis),
+        TcpStream::connect(&addr),
+    )
+    .await
+    {
         Ok(s) => s.is_ok(),
         Err(_) => false,
     }
@@ -50,103 +55,75 @@ pub async fn http_s(req: HttpsRequest) {
         .body(Body::empty())
         .unwrap();
 
-    let request = match timeout(
-        Duration::from_secs(req.timeout / 2),
-        req.client.request(request),
-    )
-    .await
-    {
-        Ok(r) => r,
-        Err(_) => {
-            req.tx
-                .send(WorkerMessage::Timeout(
-                    format!(
-                        "[{}][{}:{}] - Request timeout",
-                        req.target.protocol.to_uppercase().blue(),
-                        req.target.domain.cyan(),
-                        req.target.port.to_string().cyan(),
-                    ),
-                    req.target.protocol,
-                ))
-                .unwrap();
-            return;
-        }
-    };
-
-    let (parts, body) = match request {
-        Ok(r) => r.into_parts(),
-        Err(e) => {
-            req.tx
-                .send(WorkerMessage::Error(
-                    format!(
-                        "[{}][{}:{}] - Request error: {}",
-                        req.target.protocol.to_uppercase().blue(),
-                        req.target.domain.cyan(),
-                        req.target.port.to_string().cyan(),
-                        e
-                    ),
-                    req.target.protocol,
-                ))
-                .unwrap();
-            return;
-        }
-    };
-
-    let body = match timeout(
-        Duration::from_secs(req.timeout / 2),
-        hyper::body::aggregate(body),
-    )
-    .await
-    {
-        Ok(a) => a,
-        Err(_) => {
-            req.tx
-                .send(WorkerMessage::Timeout(
-                    format!(
-                        "[{}][{}:{}] - Response body timeout",
-                        req.target.protocol.to_uppercase().blue(),
-                        req.target.domain.cyan(),
-                        req.target.port.to_string().cyan(),
-                    ),
-                    req.target.protocol,
-                ))
-                .unwrap();
-            return;
-        }
-    };
-
-    match body {
-        Ok(b) => {
-            // Merge response's headers and body
-            let mut raw_content = format!("{:?} {}\r\n", parts.version, parts.status);
-            for header in &parts.headers {
-                raw_content = format!(
-                    "{}{}: {}\r\n",
-                    raw_content,
-                    header.0,
-                    header.1.to_str().unwrap_or("")
-                );
+    let to = Duration::from_secs(req.timeout);
+    let cb = async {
+        let (parts, body) = match req.client.request(request).await {
+            Ok(r) => r.into_parts(),
+            Err(e) => {
+                req.tx
+                    .send(WorkerMessage::Error(
+                        format!(
+                            "[{}][{}:{}] - Request error: {}",
+                            req.target.protocol.to_uppercase().blue(),
+                            req.target.domain.cyan(),
+                            req.target.port.to_string().cyan(),
+                            e
+                        ),
+                        req.target.protocol.clone(),
+                    ))
+                    .unwrap();
+                return;
             }
-            raw_content = format!("{}\r\n{}", raw_content, String::from_utf8_lossy(b.bytes()));
-            req.target.response = raw_content;
+        };
 
-            req.tx.send(WorkerMessage::Response(req.target)).unwrap();
-        }
-        Err(e) => {
-            req.tx
-                .send(WorkerMessage::Error(
-                    format!(
-                        "[{}][{}:{}] - Response error: {}",
-                        req.target.protocol.to_uppercase().blue(),
-                        req.target.domain.cyan(),
-                        req.target.port.to_string().cyan(),
-                        e
-                    ),
-                    req.target.protocol,
-                ))
-                .unwrap();
-        }
+        match hyper::body::aggregate(body).await {
+            Ok(b) => {
+                // Merge response's headers and body
+                let mut raw_content = format!("{:?} {}\r\n", parts.version, parts.status);
+                for header in &parts.headers {
+                    raw_content = format!(
+                        "{}{}: {}\r\n",
+                        raw_content,
+                        header.0,
+                        header.1.to_str().unwrap_or("")
+                    );
+                }
+                raw_content = format!("{}\r\n{}", raw_content, String::from_utf8_lossy(b.bytes()));
+                req.target.response = raw_content;
+
+                req.tx
+                    .send(WorkerMessage::Response(req.target.clone()))
+                    .unwrap();
+            }
+            Err(e) => {
+                req.tx
+                    .send(WorkerMessage::Error(
+                        format!(
+                            "[{}][{}:{}] - Response error: {}",
+                            req.target.protocol.to_uppercase().blue(),
+                            req.target.domain.cyan(),
+                            req.target.port.to_string().cyan(),
+                            e
+                        ),
+                        req.target.protocol.clone(),
+                    ))
+                    .unwrap();
+            }
+        };
     };
+    if timeout(to, cb).await.is_err() {
+        req.tx
+            .send(WorkerMessage::Timeout(
+                format!(
+                    "[{}][{}:{}] - Request timeout",
+                    req.target.protocol.to_uppercase().blue(),
+                    req.target.domain.cyan(),
+                    req.target.port.to_string().cyan(),
+                ),
+                req.target.protocol,
+            ))
+            .unwrap();
+    }
 }
 
 pub struct TcpRequest {
@@ -170,135 +147,84 @@ pub async fn tcp_custom(req: TcpRequest) {
                         req.target.ip.cyan(),
                         req.target.port.to_string().cyan()
                     ),
-                    req.target.protocol,
+                    req.target.protocol.clone(),
                 ))
                 .unwrap();
             return;
         }
     };
 
-    let stream = match timeout(
-        Duration::from_secs(req.timeout / 3),
-        TcpStream::connect(&addr),
-    )
-    .await
-    {
-        Ok(s) => s,
-        Err(_) => {
-            req.tx
-                .send(WorkerMessage::Timeout(
-                    format!(
-                        "[{}][{}:{}] - Tcp connection timeout",
-                        req.target.protocol.to_uppercase().blue(),
-                        req.target.ip.cyan(),
-                        req.target.port.to_string().cyan(),
-                    ),
-                    req.target.protocol,
-                ))
-                .unwrap();
-            return;
-        }
-    };
+    let to = Duration::from_secs(req.timeout);
+    let cb = async {
+        let mut stream = match TcpStream::connect(&addr).await {
+            Ok(s) => s,
+            Err(e) => {
+                req.tx
+                    .send(WorkerMessage::Error(
+                        format!(
+                            "[{}][{}:{}] - TCP stream connection error: {}",
+                            req.target.protocol.to_uppercase().blue(),
+                            req.target.ip.cyan(),
+                            req.target.port.to_string().cyan(),
+                            e
+                        ),
+                        req.target.protocol.clone(),
+                    ))
+                    .unwrap();
+                return;
+            }
+        };
 
-    let mut stream = match stream {
-        Ok(s) => s,
-        Err(e) => {
+        if let Err(e) = stream.write_all(req.message.as_bytes()).await {
             req.tx
                 .send(WorkerMessage::Error(
                     format!(
-                        "[{}][{}:{}] - TCP stream connection error: {}",
+                        "[{}][{}:{}] - TCP stream write error: {}",
                         req.target.protocol.to_uppercase().blue(),
                         req.target.ip.cyan(),
                         req.target.port.to_string().cyan(),
                         e
                     ),
-                    req.target.protocol,
+                    req.target.protocol.clone(),
                 ))
                 .unwrap();
             return;
         }
-    };
 
-    match timeout(
-        Duration::from_secs(req.timeout / 3),
-        stream.write_all(req.message.as_bytes()),
-    )
-    .await
-    {
-        Ok(w) => {
-            if let Err(e) = w {
-                req.tx
-                    .send(WorkerMessage::Error(
-                        format!(
-                            "[{}][{}:{}] - TCP stream write error: {}",
-                            req.target.protocol.to_uppercase().blue(),
-                            req.target.ip.cyan(),
-                            req.target.port.to_string().cyan(),
-                            e
-                        ),
-                        req.target.protocol,
-                    ))
-                    .unwrap();
-                return;
-            }
-        }
-        Err(_) => {
+        // FIXME - improve the way how the answer is read
+        let mut answer = [0; 100_000];
+        if let Err(e) = stream.read(&mut answer).await {
             req.tx
-                .send(WorkerMessage::Timeout(
+                .send(WorkerMessage::Error(
                     format!(
-                        "[{}][{}:{}] - Tcp stream write timeout",
+                        "[{}][{}:{}] - TCP stream read error: {}",
                         req.target.protocol.to_uppercase().blue(),
                         req.target.ip.cyan(),
                         req.target.port.to_string().cyan(),
+                        e
                     ),
-                    req.target.protocol,
+                    req.target.protocol.clone(),
                 ))
                 .unwrap();
             return;
         }
+        req.target.response = String::from_utf8_lossy(&answer).to_string();
+        req.tx
+            .send(WorkerMessage::Response(req.target.clone()))
+            .unwrap();
     };
 
-    // FIXME - find a better way to read the answer
-    let mut answer = [0; 100_000];
-    match timeout(
-        Duration::from_secs(req.timeout / 3),
-        stream.read(&mut answer),
-    )
-    .await
-    {
-        Ok(w) => {
-            if let Err(e) = w {
-                req.tx
-                    .send(WorkerMessage::Error(
-                        format!(
-                            "[{}][{}:{}] - TCP stream read error: {}",
-                            req.target.protocol.to_uppercase().blue(),
-                            req.target.ip.cyan(),
-                            req.target.port.to_string().cyan(),
-                            e
-                        ),
-                        req.target.protocol,
-                    ))
-                    .unwrap();
-                return;
-            }
-        }
-        Err(_) => {
-            req.tx
-                .send(WorkerMessage::Timeout(
-                    format!(
-                        "[{}][{}:{}] - Tcp stream read timeout",
-                        req.target.protocol.to_uppercase().blue(),
-                        req.target.ip.cyan(),
-                        req.target.port.to_string().cyan(),
-                    ),
-                    req.target.protocol,
-                ))
-                .unwrap();
-            return;
-        }
+    if timeout(to, cb).await.is_err() {
+        req.tx
+            .send(WorkerMessage::Timeout(
+                format!(
+                    "[{}][{}:{}] - Tcp connection timeout",
+                    req.target.protocol.to_uppercase().blue(),
+                    req.target.ip.cyan(),
+                    req.target.port.to_string().cyan(),
+                ),
+                req.target.protocol,
+            ))
+            .unwrap();
     };
-
-    req.target.response = String::from_utf8_lossy(&answer).to_string();
-    req.tx.send(WorkerMessage::Response(req.target)).unwrap();
 }
