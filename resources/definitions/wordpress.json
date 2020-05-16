@@ -5,15 +5,12 @@
         "options": {
             "ports": [
                 80,
-                443,
-                8080,
-                8081,
-                8090
+                443
             ]
         },
         "service": {
             "regex": "(?m)<meta name=\"generator\" content=\"WordPress (?-m)",
-            "log": false
+            "log": true
         },
         "versions": {
             "semver": {

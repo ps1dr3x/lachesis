@@ -22,7 +22,7 @@
         },
         "service": {
             "regex": "IPCamera_Logo|MJPG-Streamer|(?i)webcam server(?-i)",
-            "log": false
+            "log": true
         },
         "versions": {
             "regex": [
