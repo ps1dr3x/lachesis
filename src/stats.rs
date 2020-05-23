@@ -45,30 +45,26 @@ impl Stats {
             let pb = ProgressBar::new(max_targets as u64);
             pb.set_style(
                 ProgressStyle::default_bar()
-                    .template(
-                        "\n{spinner:.green} [{elapsed_precise}] [{wide_bar:40.cyan/blue}] ({eta})",
-                    )
+                    .template("\n[{elapsed_precise}] [{bar:40.cyan/blue}] ({eta})")
                     .progress_chars("#>-"),
             );
             pb
         } else {
             let pb = ProgressBar::new(0);
             pb.set_style(
-                ProgressStyle::default_spinner()
-                    .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ")
-                    .template("\n{prefix:.bold.dim} {spinner}"),
+                ProgressStyle::default_spinner().template("\n[{elapsed_precise}] {spinner:.green}"),
             );
             pb
         };
 
         let pb1 = ProgressBar::new(0);
-        pb1.set_style(ProgressStyle::default_spinner().template("  {wide_msg}"));
+        pb1.set_style(ProgressStyle::default_spinner().template("{wide_msg}"));
         let pb2 = ProgressBar::new(0);
-        pb2.set_style(ProgressStyle::default_spinner().template("  {wide_msg}"));
+        pb2.set_style(ProgressStyle::default_spinner().template("{wide_msg}"));
         let pb3 = ProgressBar::new(0);
-        pb3.set_style(ProgressStyle::default_spinner().template("  {wide_msg}"));
+        pb3.set_style(ProgressStyle::default_spinner().template("{wide_msg}"));
         let pb4 = ProgressBar::new(0);
-        pb4.set_style(ProgressStyle::default_spinner().template("  {wide_msg}"));
+        pb4.set_style(ProgressStyle::default_spinner().template("{wide_msg}"));
         pbs.push(m.add(pb0));
         pbs.push(m.add(pb1));
         pbs.push(m.add(pb2));
@@ -237,12 +233,15 @@ impl Stats {
 
     pub fn finish(&mut self) {
         if self.max_targets != 0 && self.targets < self.max_targets {
-            self.log_info(
-                "All the targets have been consumed before reaching the specified max-targets number".to_string()
-            );
+            self.log_info(format!(
+                "All the targets have been consumed before reaching the specified max-targets number. targets: {} max_targets: {}",
+                self.targets, self.max_targets
+            ));
         }
         self.progress_bars[0].finish();
         self.progress_bars[1].finish();
         self.progress_bars[2].finish();
+        self.progress_bars[3].finish();
+        self.progress_bars[4].finish();
     }
 }
