@@ -1,4 +1,8 @@
-use std::{net::SocketAddr, sync::mpsc::Sender, time::Duration};
+use std::{
+    net::SocketAddr,
+    sync::mpsc::Sender,
+    time::{Duration, Instant},
+};
 
 use bytes::Buf;
 use colored::Colorize;
@@ -10,12 +14,16 @@ use tokio::{
     time::timeout,
 };
 
-use super::worker::{Target, WorkerMessage};
+use super::worker::{PortStatus, Target, WorkerMessage};
 
-pub async fn test_port(ip: String, port: u16, timeout_millis: u64) -> bool {
-    let addr = match format!("{}:{}", ip, port).parse::<SocketAddr>() {
-        Ok(addr) => addr,
-        Err(_) => return false,
+pub async fn test_port(ip: String, port: u16, timeout_millis: u64) -> PortStatus {
+    let addr = format!("{}:{}", ip, port).parse::<SocketAddr>().unwrap();
+    let mut port_status = PortStatus {
+        ip,
+        port,
+        open: false,
+        time: Instant::now(),
+        timeout: false,
     };
 
     match timeout(
@@ -24,8 +32,17 @@ pub async fn test_port(ip: String, port: u16, timeout_millis: u64) -> bool {
     )
     .await
     {
-        Ok(s) => s.is_ok(),
-        Err(_) => false,
+        Ok(s) => match s {
+            Ok(_) => {
+                port_status.open = true;
+                port_status
+            }
+            Err(_) => port_status,
+        },
+        Err(_) => {
+            port_status.timeout = true;
+            port_status
+        }
     }
 }
 

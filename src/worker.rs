@@ -93,7 +93,12 @@ fn get_next_target(conf: &Conf) -> Option<Target> {
     }
 }
 
-async fn check_ports(ws: WorkerState, defs: &[Definition], ip: String) -> HashSet<u16> {
+async fn check_ports(
+    tx: Sender<WorkerMessage>,
+    ws: WorkerState,
+    defs: &[Definition],
+    ip: String,
+) -> HashSet<u16> {
     let mut unique_ports = HashSet::new();
 
     for def in defs {
@@ -105,6 +110,7 @@ async fn check_ports(ws: WorkerState, defs: &[Definition], ip: String) -> HashSe
     let open_ports = Arc::new(Mutex::new(unique_ports.clone()));
     let mut futs = FuturesUnordered::new();
     for port in unique_ports {
+        let tx = tx.clone();
         let ws = ws.clone();
         let ip = ip.clone();
         let open_ports = open_ports.clone();
@@ -113,9 +119,11 @@ async fn check_ports(ws: WorkerState, defs: &[Definition], ip: String) -> HashSe
 
             let now = Instant::now();
             let timeout = ws.probe_time.lock().unwrap().timeout;
-            if !net::test_port(ip.clone(), port, timeout as u64).await {
+            let port_status = net::test_port(ip, port, timeout as u64).await;
+            if !port_status.open {
                 open_ports.lock().unwrap().remove(&port);
             }
+            tx.send(WorkerMessage::PortStatus(port_status)).unwrap();
             // Timeout estimation formula from nmap
             // nmap.org/book/port-scanning-algorithms.html
             let rtt = now.elapsed().as_millis() as f32;
@@ -158,7 +166,17 @@ fn build_https_client() -> Client<HttpsConnector<HttpConnector>> {
 }
 
 #[derive(Debug, Clone)]
+pub struct PortStatus {
+    pub ip: String,
+    pub port: u16,
+    pub open: bool,
+    pub time: Instant,
+    pub timeout: bool,
+}
+
+#[derive(Debug, Clone)]
 pub enum WorkerMessage {
+    PortStatus(PortStatus),
     Response(Target),
     Error(String, String),
     Timeout(String, String),
@@ -239,8 +257,14 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
             let ws_in = ws.clone();
             let tx = tx.clone();
             tokio::spawn(async move {
-                let open_ports =
-                    check_ports(ws_in.clone(), &ws_in.conf.definitions, target.ip.clone()).await;
+                let tx_in = tx.clone();
+                let open_ports = check_ports(
+                    tx_in,
+                    ws_in.clone(),
+                    &ws_in.conf.definitions,
+                    target.ip.clone(),
+                )
+                .await;
 
                 let mut http_s_ports = HashSet::new();
                 for def in &ws_in.conf.definitions {

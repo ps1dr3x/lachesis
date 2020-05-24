@@ -102,6 +102,10 @@ fn run_worker(conf: &Conf) -> ExitCode {
         };
 
         match msg {
+            WorkerMessage::PortStatus(status) => {
+                stats.update_port(status);
+                continue;
+            }
             WorkerMessage::Error(msg, protocol) => {
                 if conf.debug {
                     stats.log_err(msg);
@@ -117,7 +121,7 @@ fn run_worker(conf: &Conf) -> ExitCode {
                 continue;
             }
             WorkerMessage::Response(target) => {
-                stats.update_avg_time(target.time, &target.protocol);
+                stats.update_req_avg_time(target.time, &target.protocol);
                 if handle_worker_response(conf, &mut stats, &dbm, target) == ExitCode::Err {
                     return ExitCode::Err;
                 }
