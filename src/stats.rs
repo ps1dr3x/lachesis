@@ -226,15 +226,16 @@ impl Stats {
 
     fn update_message(&self) {
         self.progress_bars[1].set_message(&format!(
-            "Targets: {} Requests: {} Req/sec: {}",
+            "Targets: {} Requests: {} Req/sec: {} Matching: {}",
             self.targets.to_string().cyan(),
             self.total_requests().to_string().cyan(),
-            self.avg_reqs_per_sec.to_string().cyan()
+            self.avg_reqs_per_sec.to_string().cyan(),
+            self.matching.to_string().green(),
         ));
 
         self.progress_bars[2].set_message(&format!(
             "Ports [tested: {} open: {} closed: {} timedout: {} avg_time: {}ms]",
-            self.ports.total().to_string().green(),
+            self.ports.total().to_string().cyan(),
             self.ports.open.to_string().green(),
             self.ports.closed.to_string().red(),
             self.ports.timedout.to_string().yellow(),
