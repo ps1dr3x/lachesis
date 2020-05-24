@@ -49,7 +49,7 @@ function DataTable () {
   const [deleteModal, setDeleteModal] = useState(false)
 
   async function getData (page) {
-    let newPagination = { ...pagination }
+    const newPagination = { ...pagination }
     if (page > newPagination.page) {
       while (page > newPagination.page) {
         newPagination.offset += newPagination.rows
@@ -92,7 +92,7 @@ function DataTable () {
   }
 
   function toggleSelection (id) {
-    let newSelection = { ...selection }
+    const newSelection = { ...selection }
     if (newSelection[id]) {
       delete newSelection[id]
     } else {
@@ -102,8 +102,8 @@ function DataTable () {
   }
 
   function toggleAll (action) {
-    let newSelection = {}
-    for (let row of data.rows) {
+    const newSelection = {}
+    for (const row of data.rows) {
       switch (action) {
         case 'select':
           newSelection[row[0]] = true
@@ -117,7 +117,7 @@ function DataTable () {
   }
 
   async function deleteRecords () {
-    let IDs = Object.keys(selection)
+    const IDs = Object.keys(selection)
       .map((el) => parseInt(el))
 
     let res = null
@@ -126,7 +126,7 @@ function DataTable () {
         {
           method: 'DELETE',
           headers: {
-            'Accept': 'application/json',
+            Accept: 'application/json',
             'Content-Type': 'application/json'
           },
           body: JSON.stringify(IDs)
@@ -138,9 +138,9 @@ function DataTable () {
     if (res === null) {
       setData(null)
     } else {
-      let newData = JSON.parse(JSON.stringify(data))
-      for (let r in newData.rows) {
-        for (let id of IDs) {
+      const newData = JSON.parse(JSON.stringify(data))
+      for (const r in newData.rows) {
+        for (const id of IDs) {
           if (newData.rows[r][0] === parseInt(id)) {
             newData.rows.splice(r, 1)
           }
@@ -197,8 +197,8 @@ function DataTable () {
             (() => {
               if (data.rows.length) {
                 return data.rows.map((fields) => {
-                  let cells = []
-                  for (let field in fields) {
+                  const cells = []
+                  for (const field in fields) {
                     cells.push(<Table.Cell key={uuid()}><Label>{fields[field]}</Label></Table.Cell>)
                   }
                   return (
@@ -206,7 +206,8 @@ function DataTable () {
                       <Table.Cell collapsing>
                         <Checkbox
                           checked={selection[fields[0]] === true}
-                          onChange={(e) => toggleSelection(fields[0])} />
+                          onChange={(e) => toggleSelection(fields[0])}
+                        />
                       </Table.Cell>
                       {cells}
                     </Table.Row>
@@ -231,11 +232,13 @@ function DataTable () {
                 <Grid.Row>
                   <Grid.Column width={4}>
                     <Button
-                      onClick={(e) => toggleAll('select')}>
+                      onClick={(e) => toggleAll('select')}
+                    >
                       Select All
                     </Button>
                     <Button
-                      onClick={(e) => toggleAll('deselect')}>
+                      onClick={(e) => toggleAll('deselect')}
+                    >
                       Deselect All
                     </Button>
                   </Grid.Column>
@@ -244,7 +247,8 @@ function DataTable () {
                       size='tiny'
                       activePage={pagination.page}
                       totalPages={pagination.of}
-                      onPageChange={(e, { activePage }) => getData(activePage)} />
+                      onPageChange={(e, { activePage }) => getData(activePage)}
+                    />
                     <Dropdown
                       className='dropdown'
                       placeholder='Rows'
@@ -255,20 +259,23 @@ function DataTable () {
                       onChange={(e, { text, value }) => setPagination({
                         ...pagination,
                         rows: value
-                      })} />
+                      })}
+                    />
                   </Grid.Column>
                   <Grid.Column width={2}>
                     <Button
                       floated='right'
                       disabled={Object.keys(selection).length === 0}
-                      onClick={(e) => setDeleteModal(!deleteModal)}>
+                      onClick={(e) => setDeleteModal(!deleteModal)}
+                    >
                       Delete
                     </Button>
                     <Modal
                       open={deleteModal}
                       closeOnEscape={false}
                       closeOnDimmerClick={false}
-                      onClose={(e) => setDeleteModal(!deleteModal)} >
+                      onClose={(e) => setDeleteModal(!deleteModal)}
+                    >
                       <Modal.Header>Delete selected rows</Modal.Header>
                       <Modal.Content>
                         <p>Are you sure?</p>
@@ -285,7 +292,8 @@ function DataTable () {
                           positive
                           labelPosition='right'
                           icon='checkmark'
-                          content='Yes' />
+                          content='Yes'
+                        />
                       </Modal.Actions>
                     </Modal>
                   </Grid.Column>
