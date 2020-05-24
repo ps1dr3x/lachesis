@@ -5,7 +5,6 @@ use std::{
 };
 
 use bytes::Buf;
-use colored::Colorize;
 use hyper::{client::HttpConnector, Body, Client, Request, Uri};
 use hyper_tls::HttpsConnector;
 use tokio::{
@@ -78,15 +77,10 @@ pub async fn http_s(req: HttpsRequest) {
             Ok(r) => r.into_parts(),
             Err(e) => {
                 req.tx
-                    .send(WorkerMessage::Error(
-                        format!(
-                            "[{}][{}:{}] - Request error: {}",
-                            req.target.protocol.to_uppercase().blue(),
-                            req.target.domain.cyan(),
-                            req.target.port.to_string().cyan(),
-                            e
-                        ),
-                        req.target.protocol.clone(),
+                    .send(WorkerMessage::Fail(
+                        req.target.clone(),
+                        "Request error".to_string(),
+                        Some(e.to_string()),
                     ))
                     .unwrap();
                 return;
@@ -114,15 +108,10 @@ pub async fn http_s(req: HttpsRequest) {
             }
             Err(e) => {
                 req.tx
-                    .send(WorkerMessage::Error(
-                        format!(
-                            "[{}][{}:{}] - Response error: {}",
-                            req.target.protocol.to_uppercase().blue(),
-                            req.target.domain.cyan(),
-                            req.target.port.to_string().cyan(),
-                            e
-                        ),
-                        req.target.protocol.clone(),
+                    .send(WorkerMessage::Fail(
+                        req.target.clone(),
+                        "Response error".to_string(),
+                        Some(e.to_string()),
                     ))
                     .unwrap();
             }
@@ -130,15 +119,7 @@ pub async fn http_s(req: HttpsRequest) {
     };
     if timeout(to, cb).await.is_err() {
         req.tx
-            .send(WorkerMessage::Timeout(
-                format!(
-                    "[{}][{}:{}] - Request timeout",
-                    req.target.protocol.to_uppercase().blue(),
-                    req.target.domain.cyan(),
-                    req.target.port.to_string().cyan(),
-                ),
-                req.target.protocol,
-            ))
+            .send(WorkerMessage::Timeout(req.target.clone()))
             .unwrap();
     }
 }
@@ -157,14 +138,10 @@ pub async fn tcp_custom(req: TcpRequest) {
         Ok(addr) => addr,
         Err(_e) => {
             req.tx
-                .send(WorkerMessage::Error(
-                    format!(
-                        "[{}] Invalid address: {}:{}",
-                        req.target.protocol.to_uppercase().blue(),
-                        req.target.ip.cyan(),
-                        req.target.port.to_string().cyan()
-                    ),
-                    req.target.protocol.clone(),
+                .send(WorkerMessage::Fail(
+                    req.target,
+                    "Invalid address".to_string(),
+                    None,
                 ))
                 .unwrap();
             return;
@@ -177,15 +154,10 @@ pub async fn tcp_custom(req: TcpRequest) {
             Ok(s) => s,
             Err(e) => {
                 req.tx
-                    .send(WorkerMessage::Error(
-                        format!(
-                            "[{}][{}:{}] - TCP stream connection error: {}",
-                            req.target.protocol.to_uppercase().blue(),
-                            req.target.ip.cyan(),
-                            req.target.port.to_string().cyan(),
-                            e
-                        ),
-                        req.target.protocol.clone(),
+                    .send(WorkerMessage::Fail(
+                        req.target.clone(),
+                        "TCP stream connection error".to_string(),
+                        Some(e.to_string()),
                     ))
                     .unwrap();
                 return;
@@ -194,15 +166,10 @@ pub async fn tcp_custom(req: TcpRequest) {
 
         if let Err(e) = stream.write_all(req.message.as_bytes()).await {
             req.tx
-                .send(WorkerMessage::Error(
-                    format!(
-                        "[{}][{}:{}] - TCP stream write error: {}",
-                        req.target.protocol.to_uppercase().blue(),
-                        req.target.ip.cyan(),
-                        req.target.port.to_string().cyan(),
-                        e
-                    ),
-                    req.target.protocol.clone(),
+                .send(WorkerMessage::Fail(
+                    req.target.clone(),
+                    "TCP stream write error".to_string(),
+                    Some(e.to_string()),
                 ))
                 .unwrap();
             return;
@@ -212,15 +179,10 @@ pub async fn tcp_custom(req: TcpRequest) {
         let mut answer = [0; 100_000];
         if let Err(e) = stream.read(&mut answer).await {
             req.tx
-                .send(WorkerMessage::Error(
-                    format!(
-                        "[{}][{}:{}] - TCP stream read error: {}",
-                        req.target.protocol.to_uppercase().blue(),
-                        req.target.ip.cyan(),
-                        req.target.port.to_string().cyan(),
-                        e
-                    ),
-                    req.target.protocol.clone(),
+                .send(WorkerMessage::Fail(
+                    req.target.clone(),
+                    "TCP stream read error".to_string(),
+                    Some(e.to_string()),
                 ))
                 .unwrap();
             return;
@@ -233,15 +195,7 @@ pub async fn tcp_custom(req: TcpRequest) {
 
     if timeout(to, cb).await.is_err() {
         req.tx
-            .send(WorkerMessage::Timeout(
-                format!(
-                    "[{}][{}:{}] - Tcp connection timeout",
-                    req.target.protocol.to_uppercase().blue(),
-                    req.target.ip.cyan(),
-                    req.target.port.to_string().cyan(),
-                ),
-                req.target.protocol,
-            ))
+            .send(WorkerMessage::Timeout(req.target.clone()))
             .unwrap();
     };
 }

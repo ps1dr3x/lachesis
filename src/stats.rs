@@ -3,7 +3,18 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use std::{thread, time::Instant};
 
-use crate::{detector::DetectorResponse, utils, worker};
+use crate::{
+    detector::DetectorResponse,
+    worker::{self, Target},
+};
+
+pub fn format_host(target: &Target) -> String {
+    if !target.domain.is_empty() {
+        format!("{} -> {}", target.ip, target.domain)
+    } else {
+        target.ip.clone()
+    }
+}
 
 struct PortStatus {
     open: u64,
@@ -268,19 +279,52 @@ impl Stats {
         ));
     }
 
-    pub fn log_info(&mut self, message: String) {
-        self.progress_bars[0].println(format!("[{}]{}", "INFO".yellow(), message));
+    pub fn log_int_err(&mut self, message: String) {
+        self.progress_bars[0].println(format!("[{}] {}", "ERROR".red(), message));
     }
 
-    pub fn log_err(&mut self, message: String) {
-        self.progress_bars[0].println(format!("[{}]{}", "ERROR".red(), message));
+    pub fn log_response(&mut self, target: &Target) {
+        self.progress_bars[0].println(format!(
+            "[{}][{}][{}:{}] Received a response. Length: {}",
+            "RESPONSE".cyan(),
+            target.protocol.to_uppercase().blue(),
+            format_host(&target).cyan(),
+            target.port.to_string().cyan(),
+            target.response.len().to_string().cyan()
+        ));
+    }
+
+    pub fn log_timeout(&mut self, target: &Target) {
+        self.progress_bars[0].println(format!(
+            "[{}][{}][{}:{}] - Request timeout",
+            "TIMEOUT".yellow(),
+            target.protocol.to_uppercase().blue(),
+            target.domain.cyan(),
+            target.port.to_string().cyan(),
+        ));
+    }
+
+    pub fn log_fail(&mut self, target: &Target, error_context: String, error: Option<String>) {
+        self.progress_bars[0].println(format!(
+            "[{}][{}][{}:{}] - {}{}",
+            "FAIL".magenta(),
+            target.protocol.to_uppercase().blue(),
+            target.domain.cyan(),
+            target.port.to_string().cyan(),
+            error_context,
+            if let Some(e) = error {
+                format!(": {}", e)
+            } else {
+                "".to_string()
+            },
+        ));
     }
 
     pub fn log_match(&mut self, dr: &DetectorResponse) {
         self.progress_bars[0].println(format!(
             "[{}][{}] service: {} version: {} description: {}",
             "MATCH".green(),
-            utils::format_host(&dr.target).green(),
+            format_host(&dr.target).green(),
             dr.service.green(),
             dr.version.green(),
             dr.description.green()
@@ -289,7 +333,7 @@ impl Stats {
 
     pub fn finish(&mut self) {
         if self.max_targets != 0 && self.targets < self.max_targets {
-            self.log_info(format!(
+            self.log_int_err(format!(
                 "All the targets have been consumed before reaching the specified max-targets number. targets: {} max_targets: {}",
                 self.targets, self.max_targets
             ));

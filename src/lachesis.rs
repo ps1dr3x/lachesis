@@ -16,7 +16,6 @@ use crate::{
     db::DbMan,
     detector,
     stats::Stats,
-    utils::format_host,
     web::{self, UIMessage},
     worker::{self, Target, WorkerMessage},
 };
@@ -37,13 +36,7 @@ impl Termination for ExitCode {
 }
 
 fn handle_worker_response(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target: Target) -> ExitCode {
-    stats.log_info(format!(
-        "[{}][{}:{}] Received a response. Length: {}",
-        target.protocol.to_uppercase().blue(),
-        format_host(&target).cyan(),
-        target.port.to_string().cyan(),
-        target.response.len().to_string().cyan()
-    ));
+    stats.log_response(&target);
 
     let responses = detector::detect(&target, &conf.definitions);
 
@@ -51,7 +44,7 @@ fn handle_worker_response(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target: T
     if !responses.is_empty() {
         for res in responses {
             if let Some(error) = res.error {
-                stats.log_err(error);
+                stats.log_int_err(error);
                 continue;
             }
 
@@ -62,7 +55,7 @@ fn handle_worker_response(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target: T
             let id = match dbm.save_service(&res) {
                 Ok(id) => id.to_string(),
                 Err(err) => {
-                    stats.log_err(format!(
+                    stats.log_int_err(format!(
                         "Error while saving a matching service in the embedded db: {}",
                         err
                     ));
@@ -85,7 +78,7 @@ fn run_worker(conf: &Conf) -> ExitCode {
     let dbm = match DbMan::init() {
         Ok(dbm) => dbm,
         Err(err) => {
-            stats.log_err(format!("Db initialization error: {}", err));
+            stats.log_int_err(format!("Db initialization error: {}", err));
             return ExitCode::Err;
         }
     };
@@ -106,18 +99,18 @@ fn run_worker(conf: &Conf) -> ExitCode {
                 stats.update_port(status);
                 continue;
             }
-            WorkerMessage::Error(msg, protocol) => {
+            WorkerMessage::Fail(target, error_context, error) => {
                 if conf.debug {
-                    stats.log_err(msg);
+                    stats.log_fail(&target, error_context, error);
                 }
-                stats.increment_failed(&protocol);
+                stats.increment_failed(&target.protocol);
                 continue;
             }
-            WorkerMessage::Timeout(msg, protocol) => {
+            WorkerMessage::Timeout(target) => {
                 if conf.debug {
-                    stats.log_err(msg);
+                    stats.log_timeout(&target);
                 }
-                stats.increment_timedout(&protocol);
+                stats.increment_timedout(&target.protocol);
                 continue;
             }
             WorkerMessage::Response(target) => {
@@ -132,7 +125,7 @@ fn run_worker(conf: &Conf) -> ExitCode {
     }
 
     if let Err(e) = thread.join() {
-        stats.log_err(format!("The thread being joined has panicked: {:?}", e));
+        stats.log_int_err(format!("The thread being joined has panicked: {:?}", e));
     };
 
     stats.finish();

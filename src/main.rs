@@ -14,7 +14,6 @@ mod detector;
 mod lachesis;
 mod net;
 mod stats;
-mod utils;
 mod validators;
 mod web;
 mod worker;

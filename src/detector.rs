@@ -2,7 +2,7 @@ use colored::Colorize;
 use regex::Regex;
 use semver::Version;
 
-use crate::{conf::Definition, utils::format_host, worker::Target};
+use crate::{conf::Definition, stats::format_host, worker::Target};
 
 #[derive(Clone, Debug)]
 pub struct DetectorResponse {
@@ -78,8 +78,7 @@ pub fn detect(target: &Target, definitions: &[Definition]) -> Vec<DetectorRespon
                 Ok(ver) => ver,
                 Err(_err) => {
                     response.error = Some(format!(
-                        "[{}][{}:{}] - Unknown or invalid semver: {}",
-                        "WARN".yellow(),
+                        "[{}:{}] - Unknown or invalid semver: {}",
                         format_host(&response.target).cyan(),
                         target.port.to_string().cyan(),
                         response.version

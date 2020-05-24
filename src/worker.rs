@@ -178,8 +178,8 @@ pub struct PortStatus {
 pub enum WorkerMessage {
     PortStatus(PortStatus),
     Response(Target),
-    Error(String, String),
-    Timeout(String, String),
+    Fail(Target, String, Option<String>),
+    Timeout(Target),
     NextTarget,
     Shutdown,
 }
