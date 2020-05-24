@@ -214,10 +214,11 @@ struct WorkerState {
 
 impl WorkerState {
     fn new(conf: Conf, https_client: Client<HttpsConnector<HttpConnector>>) -> Self {
+        let max_concurrent_requests = conf.max_concurrent_requests as usize;
         Self {
             conf,
             https_client,
-            semaphore: Arc::new(Semaphore::new(500)),
+            semaphore: Arc::new(Semaphore::new(max_concurrent_requests)),
             requests: Arc::new(Mutex::new(WorkerRequests {
                 spawned: 0,
                 completed: 0,

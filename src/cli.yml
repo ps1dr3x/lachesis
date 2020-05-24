@@ -92,7 +92,16 @@ args:
         Sets a maximum timeout for each request (seconds)
 
       takes_value: true
-      default_value: "11"
+      default_value: "10"
+  - max_concurrent_requests:
+      short: c
+      long: max-concurrent-requests
+      value_name: NUM
+      help: |
+        Sets the maximum number of concurrent requests
+
+      takes_value: true
+      default_value: "500"
   - debug:
       short: v
       long: debug

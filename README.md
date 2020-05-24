@@ -28,37 +28,40 @@ FLAGS:
                       
 
 OPTIONS:
-    -D, --dataset <FILE>           The full path of the DNS dataset used for the requests. The accepted format is:
-                                   
-                                   {"name":"example.com","type":"a","value":"93.184.216.34"}
-                                   {"name":"example.net","type":"a","value":"93.184.216.34"}
-                                   {"name":"example.org","type":"a","value":"93.184.216.34"}
-                                   
-                                   An example of a compatible dataset is the forward DNS dataset by Rapid7
-                                   (https://opendata.rapid7.com/sonar.fdns_v2/)
-                                    
-    -d, --def <FILE>...            Default: all the files in resources/definitions
-                                    
-                                   Multiple definitions can be selected (eg. --def wordpress --def vnc)
-                                   Accepted formats are:
-                                     File name with or without extension (eg. vnc.json or vnc). The json file will be
-                                   searched in directory resources/definitions/
-                                     Full/relative path to file (eg. resources/definitions/vnc.json or
-                                   /casual_path/mydef.json)
-                                      
-    -e, --exclude-def <FILE>...    If all the existing definitions are selected (no -d/--def values provided) is
-                                   possible to exclude some of them using this argument.
-                                   Accepted formats are:
-                                     File name with or without extension (eg. vnc.json or vnc)
-                                      
-    -m, --max-targets <NUM>        Sets a maximum limit of targets
-                                    
-    -t, --req-timeout <NUM>        Sets a maximum timeout for each request (seconds)
-                                    [default: 11]
-    -S, --subnet <SUBNET>...       Scan one or more subnets
-                                    
-    -u, --user-agent <STRING>      Sets a custom user agent (http/https)
-                                    [default: lachesis/0.2.0]
+    -D, --dataset <FILE>                   The full path of the DNS dataset used for the requests. The accepted format
+                                           is:
+                                           
+                                           {"name":"example.com","type":"a","value":"93.184.216.34"}
+                                           {"name":"example.net","type":"a","value":"93.184.216.34"}
+                                           {"name":"example.org","type":"a","value":"93.184.216.34"}
+                                           
+                                           An example of a compatible dataset is the forward DNS dataset by Rapid7
+                                           (https://opendata.rapid7.com/sonar.fdns_v2/)
+                                            
+    -d, --def <FILE>...                    Default: all the files in resources/definitions
+                                            
+                                           Multiple definitions can be selected (eg. --def wordpress --def vnc)
+                                           Accepted formats are:
+                                             File name with or without extension (eg. vnc.json or vnc). The json file
+                                           will be searched in directory resources/definitions/
+                                             Full/relative path to file (eg. resources/definitions/vnc.json or
+                                           /casual_path/mydef.json)
+                                              
+    -e, --exclude-def <FILE>...            If all the existing definitions are selected (no -d/--def values provided) is
+                                           possible to exclude some of them using this argument.
+                                           Accepted formats are:
+                                             File name with or without extension (eg. vnc.json or vnc)
+                                              
+    -c, --max-concurrent-requests <NUM>    Sets the maximum number of concurrent requests
+                                            [default: 500]
+    -m, --max-targets <NUM>                Sets a maximum limit of targets
+                                            
+    -t, --req-timeout <NUM>                Sets a maximum timeout for each request (seconds)
+                                            [default: 10]
+    -S, --subnet <SUBNET>...               Scan one or more subnets
+                                            
+    -u, --user-agent <STRING>              Sets a custom user agent (http/https)
+                                            [default: lachesis/0.2.0]
 ```
 
 ## Roadmap / TODOs

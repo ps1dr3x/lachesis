@@ -22,6 +22,7 @@ pub struct Conf {
     pub user_agent: String,
     pub max_targets: u64,
     pub req_timeout: u64,
+    pub max_concurrent_requests: u64,
     pub debug: bool,
     pub web_ui: bool,
 }
@@ -35,6 +36,7 @@ impl Conf {
             user_agent: String::new(),
             max_targets: 0,
             req_timeout: 10,
+            max_concurrent_requests: 500,
             debug: false,
             web_ui: false,
         }
@@ -171,7 +173,7 @@ pub fn load() -> Result<Conf, &'static str> {
     let max_targets = if matches.is_present("max_targets") {
         match value_t!(matches, "max_targets", u64) {
             Ok(n) => n,
-            Err(_e) => {
+            Err(_) => {
                 return Err("Invalid value for parameter --max-targets/-m (not a valid number)");
             }
         }
@@ -182,9 +184,16 @@ pub fn load() -> Result<Conf, &'static str> {
     // If a value for --req-timeout/-t is specified, check that it's a valid number
     let req_timeout = match value_t!(matches, "req_timeout", u64) {
         Ok(n) => n,
-        Err(_e) => {
-            println!("err {}", _e);
+        Err(_) => {
             return Err("Invalid value for parameter --req-timeout/-t (not a valid number)");
+        }
+    };
+
+    // If a value for --max-concurrent-requests/-c is specified, check that it's a valid number
+    let max_concurrent_requests = match value_t!(matches, "max_concurrent_requests", u64) {
+        Ok(n) => n,
+        Err(_) => {
+            return Err("Invalid value for parameter --max-concurrent-requests/-c (not a valid number)");
         }
     };
 
@@ -277,6 +286,7 @@ pub fn load() -> Result<Conf, &'static str> {
         user_agent: String::from(matches.value_of("user_agent").unwrap()),
         max_targets,
         req_timeout,
+        max_concurrent_requests,
         debug: matches.is_present("debug"),
         web_ui: false,
     })
