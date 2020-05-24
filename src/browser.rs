@@ -2,9 +2,9 @@ use std::{fs::File, io::prelude::Write, path::Path, thread, time};
 
 use headless_chrome::{browser, protocol::page::ScreenshotFormat, Browser, LaunchOptionsBuilder};
 
-use crate::worker::Target;
+use crate::worker::ReqTarget;
 
-pub fn maybe_take_screenshot(target: &Target, id: String) {
+pub fn maybe_take_screenshot(target: &ReqTarget, id: String) {
     if target.protocol != "https" && target.protocol != "http" {
         return;
     }

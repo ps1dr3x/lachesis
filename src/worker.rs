@@ -19,16 +19,28 @@ use crate::{
     net::{self, HttpsRequest, TcpRequest},
 };
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct DatasetRecord {
-    pub name: String,
-    #[serde(rename = "type")]
-    pub record_type: String,
-    pub value: String,
+fn build_https_client() -> Client<HttpsConnector<HttpConnector>> {
+    // TODOs:
+    // - Tweak connectors and client configuration
+    // - Try using rustls instead of native_tls as TLS connector
+    let mut http = HttpConnector::new();
+    //http.set_connect_timeout(Some(Duration::from_millis(1000)));
+    http.enforce_http(false);
+    let tls_connector = native_tls::TlsConnector::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap();
+    let tls_connector = TlsConnector::from(tls_connector);
+    let https = HttpsConnector::from((http, tls_connector));
+    Client::builder()
+        //.pool_idle_timeout(Duration::from_millis(1250))
+        //.http2_keep_alive_timeout(Duration::from_millis(1000))
+        //.retry_canceled_requests(false)
+        .build(https)
 }
 
 #[derive(Debug, Clone)]
-pub struct Target {
+pub struct ReqTarget {
     pub domain: String,
     pub ip: String,
     pub port: u16,
@@ -37,9 +49,9 @@ pub struct Target {
     pub time: Instant,
 }
 
-impl Target {
-    pub fn default() -> Target {
-        Target {
+impl ReqTarget {
+    pub fn default() -> ReqTarget {
+        ReqTarget {
             domain: String::new(),
             ip: String::new(),
             port: 0,
@@ -50,15 +62,23 @@ impl Target {
     }
 
     fn new(domain: String, ip: String) -> Self {
-        Target {
+        ReqTarget {
             domain,
             ip,
-            ..Target::default()
+            ..ReqTarget::default()
         }
     }
 }
 
-fn get_next_target(conf: &Conf) -> Option<Target> {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DatasetRecord {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub record_type: String,
+    pub value: String,
+}
+
+fn get_next_target(conf: &Conf) -> Option<ReqTarget> {
     if !conf.dataset.is_empty() {
         // If dataset mode, pick a random dns record
         // (excluding records which are not of type A)
@@ -71,7 +91,7 @@ fn get_next_target(conf: &Conf) -> Option<Target> {
             if dataset_record.record_type != "a" {
                 continue;
             }
-            return Some(Target::new(dataset_record.name, dataset_record.value));
+            return Some(ReqTarget::new(dataset_record.name, dataset_record.value));
         }
     } else {
         // If subnet mode, pick the next ip in the specified subnets
@@ -87,7 +107,7 @@ fn get_next_target(conf: &Conf) -> Option<Target> {
             }
         }
         match ip {
-            Some(ip) => Some(Target::new(ip.to_string(), ip.to_string())),
+            Some(ip) => Some(ReqTarget::new(ip.to_string(), ip.to_string())),
             None => None,
         }
     }
@@ -119,11 +139,11 @@ async fn check_ports(
 
             let now = Instant::now();
             let timeout = ws.probe_time.lock().unwrap().timeout;
-            let port_status = net::test_port(ip, port, timeout as u64).await;
-            if !port_status.open {
+            let port_target = net::test_port(ip, port, timeout as u64).await;
+            if port_target.status != PortStatus::Open {
                 open_ports.lock().unwrap().remove(&port);
             }
-            tx.send(WorkerMessage::PortStatus(port_status)).unwrap();
+            tx.send(WorkerMessage::PortTarget(port_target)).unwrap();
             // Timeout estimation formula from nmap
             // nmap.org/book/port-scanning-algorithms.html
             let rtt = now.elapsed().as_millis() as f32;
@@ -145,41 +165,27 @@ async fn check_ports(
     Arc::try_unwrap(open_ports).unwrap().into_inner().unwrap()
 }
 
-fn build_https_client() -> Client<HttpsConnector<HttpConnector>> {
-    // TODOs:
-    // - Tweak connectors and client configuration
-    // - Try using rustls instead of native_tls as TLS connector
-    let mut http = HttpConnector::new();
-    //http.set_connect_timeout(Some(Duration::from_millis(1000)));
-    http.enforce_http(false);
-    let tls_connector = native_tls::TlsConnector::builder()
-        .danger_accept_invalid_certs(true)
-        .build()
-        .unwrap();
-    let tls_connector = TlsConnector::from(tls_connector);
-    let https = HttpsConnector::from((http, tls_connector));
-    Client::builder()
-        //.pool_idle_timeout(Duration::from_millis(1250))
-        //.http2_keep_alive_timeout(Duration::from_millis(1000))
-        //.retry_canceled_requests(false)
-        .build(https)
+#[derive(Debug, Clone, PartialEq)]
+pub enum PortStatus {
+    Open,
+    Closed,
+    Timedout,
 }
 
 #[derive(Debug, Clone)]
-pub struct PortStatus {
+pub struct PortTarget {
     pub ip: String,
     pub port: u16,
-    pub open: bool,
+    pub status: PortStatus,
     pub time: Instant,
-    pub timeout: bool,
 }
 
 #[derive(Debug, Clone)]
 pub enum WorkerMessage {
-    PortStatus(PortStatus),
-    Response(Target),
-    Fail(Target, String, Option<String>),
-    Timeout(Target),
+    PortTarget(PortTarget),
+    Response(ReqTarget),
+    Fail(ReqTarget, String, Option<String>),
+    Timeout(ReqTarget),
     NextTarget,
     Shutdown,
 }

@@ -5,10 +5,10 @@ use std::{thread, time::Instant};
 
 use crate::{
     detector::DetectorResponse,
-    worker::{self, Target},
+    worker::{PortStatus, ReqTarget},
 };
 
-pub fn format_host(target: &Target) -> String {
+pub fn format_host(target: &ReqTarget) -> String {
     if !target.domain.is_empty() {
         format!("{} -> {}", target.ip, target.domain)
     } else {
@@ -16,16 +16,16 @@ pub fn format_host(target: &Target) -> String {
     }
 }
 
-struct PortStatus {
+struct PortTarget {
     open: u64,
     closed: u64,
     avg_time: u128,
     timedout: u64,
 }
 
-impl PortStatus {
+impl PortTarget {
     fn default() -> Self {
-        PortStatus {
+        PortTarget {
             open: 0,
             closed: 0,
             avg_time: 0,
@@ -34,7 +34,7 @@ impl PortStatus {
     }
 
     fn total(&self) -> u64 {
-        self.open + self.closed
+        self.open + self.closed + self.timedout
     }
 }
 
@@ -61,10 +61,12 @@ impl RequestStatus {
 }
 
 pub struct Stats {
+    start_time: Instant,
     progress_bars: Vec<ProgressBar>,
     max_targets: u64,
     targets: u64,
-    ports: PortStatus,
+    avg_reqs_per_sec: u64,
+    ports: PortTarget,
     https: RequestStatus,
     http: RequestStatus,
     tcp_custom: RequestStatus,
@@ -101,23 +103,22 @@ impl Stats {
         pb4.set_style(ProgressStyle::default_spinner().template("{wide_msg}"));
         let pb5 = ProgressBar::new(0);
         pb5.set_style(ProgressStyle::default_spinner().template("{wide_msg}"));
-        let pb6 = ProgressBar::new(0);
-        pb6.set_style(ProgressStyle::default_spinner().template("{wide_msg}"));
         pbs.push(m.add(pb0));
         pbs.push(m.add(pb1));
         pbs.push(m.add(pb2));
         pbs.push(m.add(pb3));
         pbs.push(m.add(pb4));
         pbs.push(m.add(pb5));
-        pbs.push(m.add(pb6));
 
         thread::spawn(move || m.join().unwrap());
 
         Stats {
+            start_time: Instant::now(),
             progress_bars: pbs,
             max_targets,
             targets: 0,
-            ports: PortStatus::default(),
+            avg_reqs_per_sec: 0,
+            ports: PortTarget::default(),
             https: RequestStatus::default(),
             http: RequestStatus::default(),
             tcp_custom: RequestStatus::default(),
@@ -125,43 +126,28 @@ impl Stats {
         }
     }
 
-    fn total(&self) -> u64 {
-        self.https.total() + self.http.total() + self.tcp_custom.total()
+    fn total_requests(&self) -> u64 {
+        self.ports.total() + self.https.total() + self.http.total() + self.tcp_custom.total()
     }
 
-    fn total_successful(&self) -> u64 {
-        self.https.successful + self.http.successful + self.tcp_custom.successful
-    }
-
-    fn total_req_avg_time(&self) -> u128 {
-        (self.https.avg_time + self.http.avg_time + self.tcp_custom.avg_time) / 3
-    }
-
-    fn total_failed(&self) -> u64 {
-        self.https.failed + self.http.failed + self.tcp_custom.failed
-    }
-
-    fn total_timedout(&self) -> u64 {
-        self.https.timedout + self.http.timedout + self.tcp_custom.timedout
-    }
-
-    pub fn update_port(&mut self, status: worker::PortStatus) {
-        if status.open {
-            self.ports.open += 1;
-            self.ports.avg_time = (self.ports.avg_time * self.ports.open as u128
-                + status.time.elapsed().as_millis())
-                / (self.ports.open + 1) as u128;
-        } else {
-            self.ports.closed += 1;
+    pub fn update_avg_reqs_per_sec(&mut self) {
+        let elapsed_secs = self.start_time.elapsed().as_secs();
+        if elapsed_secs > 0 {
+            self.avg_reqs_per_sec = self.total_requests() / elapsed_secs;
         }
+    }
 
-        if status.timeout {
-            self.ports.timedout += 1;
-        }
+    pub fn update_ports_stats(&mut self, port_status: PortStatus) {
+        match port_status {
+            PortStatus::Open => self.increment_successful("port", false),
+            PortStatus::Closed => self.increment_failed("port"),
+            PortStatus::Timedout => self.increment_timedout("port"),
+        };
     }
 
     pub fn increment_successful(&mut self, protocol: &str, matching: bool) {
         match protocol {
+            "port" => self.ports.open += 1,
             "https" => self.https.successful += 1,
             "http" => self.http.successful += 1,
             "tcp/custom" => self.tcp_custom.successful += 1,
@@ -177,6 +163,7 @@ impl Stats {
 
     pub fn increment_failed(&mut self, protocol: &str) {
         match protocol {
+            "port" => self.ports.closed += 1,
             "https" => self.https.failed += 1,
             "http" => self.http.failed += 1,
             "tcp/custom" => self.tcp_custom.failed += 1,
@@ -188,6 +175,7 @@ impl Stats {
 
     pub fn increment_timedout(&mut self, protocol: &str) {
         match protocol {
+            "port" => self.ports.timedout += 1,
             "https" => self.https.timedout += 1,
             "http" => self.http.timedout += 1,
             "tcp/custom" => self.tcp_custom.timedout += 1,
@@ -209,6 +197,11 @@ impl Stats {
 
     pub fn update_req_avg_time(&mut self, time: Instant, protocol: &str) {
         match protocol {
+            "port" => {
+                self.ports.avg_time = (self.ports.avg_time * self.ports.open as u128
+                    + time.elapsed().as_millis())
+                    / (self.ports.open + 1) as u128;
+            }
             "https" => {
                 self.https.avg_time = (self.https.avg_time * self.https.successful as u128
                     + time.elapsed().as_millis())
@@ -232,50 +225,47 @@ impl Stats {
     }
 
     fn update_message(&self) {
-        self.progress_bars[1]
-            .set_message(&format!("Targets: {}", self.targets.to_string().cyan(),));
+        self.progress_bars[1].set_message(&format!(
+            "Targets: {} Requests: {} Req/sec: {}",
+            self.targets.to_string().cyan(),
+            self.total_requests().to_string().cyan(),
+            self.avg_reqs_per_sec.to_string().cyan()
+        ));
 
         self.progress_bars[2].set_message(&format!(
-            "Ports [tested: {} open: {} closed: {} avg_time: {}ms timedout: {}]",
+            "Ports [tested: {} open: {} closed: {} timedout: {} avg_time: {}ms]",
             self.ports.total().to_string().green(),
             self.ports.open.to_string().green(),
             self.ports.closed.to_string().red(),
-            self.ports.avg_time.to_string().cyan(),
             self.ports.timedout.to_string().yellow(),
+            self.ports.avg_time.to_string().cyan(),
         ));
 
         self.progress_bars[3].set_message(&format!(
-            "Requests [total: {} successful: {} avg_time: {}ms failed: {} timedout: {} matching: {}]",
-            self.total().to_string().green(),
-            self.total_successful().to_string().green(),
-            self.total_req_avg_time().to_string().cyan(),
-            self.total_failed().to_string().red(),
-            self.total_timedout().to_string().yellow(),
-            self.matching.to_string().cyan(),
+            "Tcp/custom [total: {} successful: {} failed: {} timedout: {} avg_time: {}ms]",
+            self.tcp_custom.total().to_string().cyan(),
+            self.tcp_custom.successful.to_string().green(),
+            self.tcp_custom.failed.to_string().red(),
+            self.tcp_custom.timedout.to_string().yellow(),
+            self.tcp_custom.avg_time.to_string().cyan(),
         ));
 
         self.progress_bars[4].set_message(&format!(
-            "Tcp/custom [successful: {} avg_time: {}ms failed: {} timedout: {}]",
-            self.tcp_custom.successful.to_string().green(),
-            self.tcp_custom.avg_time.to_string().cyan(),
-            self.tcp_custom.failed.to_string().red(),
-            self.tcp_custom.timedout.to_string().yellow(),
+            "Http [total: {} successful: {} failed: {} timedout: {} avg_time: {}ms]",
+            self.http.total().to_string().cyan(),
+            self.http.successful.to_string().green(),
+            self.http.failed.to_string().red(),
+            self.http.timedout.to_string().yellow(),
+            self.http.avg_time.to_string().cyan(),
         ));
 
         self.progress_bars[5].set_message(&format!(
-            "Http [successful: {} avg_time: {}ms failed: {} timedout: {}]",
-            self.http.successful.to_string().green(),
-            self.http.avg_time.to_string().cyan(),
-            self.http.failed.to_string().red(),
-            self.http.timedout.to_string().yellow(),
-        ));
-
-        self.progress_bars[6].set_message(&format!(
-            "Https [successful: {} avg_time: {}ms failed: {} timedout: {}]",
+            "Https [total: {} successful: {} failed: {} timedout: {} avg_time: {}ms]",
+            self.https.total().to_string().cyan(),
             self.https.successful.to_string().green(),
-            self.https.avg_time.to_string().cyan(),
             self.https.failed.to_string().red(),
             self.https.timedout.to_string().yellow(),
+            self.https.avg_time.to_string().cyan(),
         ));
     }
 
@@ -283,7 +273,7 @@ impl Stats {
         self.progress_bars[0].println(format!("[{}] {}", "ERROR".red(), message));
     }
 
-    pub fn log_response(&mut self, target: &Target) {
+    pub fn log_response(&mut self, target: &ReqTarget) {
         self.progress_bars[0].println(format!(
             "[{}][{}][{}:{}] Received a response. Length: {}",
             "RESPONSE".cyan(),
@@ -294,7 +284,7 @@ impl Stats {
         ));
     }
 
-    pub fn log_timeout(&mut self, target: &Target) {
+    pub fn log_timeout(&mut self, target: &ReqTarget) {
         self.progress_bars[0].println(format!(
             "[{}][{}][{}:{}] - Request timeout",
             "TIMEOUT".yellow(),
@@ -304,7 +294,7 @@ impl Stats {
         ));
     }
 
-    pub fn log_fail(&mut self, target: &Target, error_context: String, error: Option<String>) {
+    pub fn log_fail(&mut self, target: &ReqTarget, error_context: String, error: Option<String>) {
         self.progress_bars[0].println(format!(
             "[{}][{}][{}:{}] - {}{}",
             "FAIL".magenta(),
@@ -344,6 +334,5 @@ impl Stats {
         self.progress_bars[3].finish();
         self.progress_bars[4].finish();
         self.progress_bars[5].finish();
-        self.progress_bars[6].finish();
     }
 }

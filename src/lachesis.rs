@@ -17,7 +17,7 @@ use crate::{
     detector,
     stats::Stats,
     web::{self, UIMessage},
-    worker::{self, Target, WorkerMessage},
+    worker::{self, ReqTarget, WorkerMessage},
 };
 
 #[derive(Debug, PartialEq)]
@@ -35,7 +35,12 @@ impl Termination for ExitCode {
     }
 }
 
-fn handle_worker_response(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target: Target) -> ExitCode {
+fn handle_worker_response(
+    conf: &Conf,
+    stats: &mut Stats,
+    dbm: &DbMan,
+    target: ReqTarget,
+) -> ExitCode {
     stats.log_response(&target);
 
     let responses = detector::detect(&target, &conf.definitions);
@@ -94,9 +99,11 @@ fn run_worker(conf: &Conf) -> ExitCode {
             Err(_) => continue,
         };
 
+        stats.update_avg_reqs_per_sec();
+
         match msg {
-            WorkerMessage::PortStatus(status) => {
-                stats.update_port(status);
+            WorkerMessage::PortTarget(port_target) => {
+                stats.update_ports_stats(port_target.status);
                 continue;
             }
             WorkerMessage::Fail(target, error_context, error) => {

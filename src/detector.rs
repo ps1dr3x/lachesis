@@ -2,11 +2,11 @@ use colored::Colorize;
 use regex::Regex;
 use semver::Version;
 
-use crate::{conf::Definition, stats::format_host, worker::Target};
+use crate::{conf::Definition, stats::format_host, worker::ReqTarget};
 
 #[derive(Clone, Debug)]
 pub struct DetectorResponse {
-    pub target: Target,
+    pub target: ReqTarget,
     pub service: String,
     pub version: String,
     pub description: String,
@@ -16,7 +16,7 @@ pub struct DetectorResponse {
 impl DetectorResponse {
     fn default() -> DetectorResponse {
         DetectorResponse {
-            target: Target::default(),
+            target: ReqTarget::default(),
             service: String::new(),
             version: String::new(),
             description: String::new(),
@@ -24,7 +24,7 @@ impl DetectorResponse {
         }
     }
 
-    fn new(target: Target) -> Self {
+    fn new(target: ReqTarget) -> Self {
         DetectorResponse {
             target,
             ..DetectorResponse::default()
@@ -32,7 +32,7 @@ impl DetectorResponse {
     }
 }
 
-pub fn detect(target: &Target, definitions: &[Definition]) -> Vec<DetectorResponse> {
+pub fn detect(target: &ReqTarget, definitions: &[Definition]) -> Vec<DetectorResponse> {
     let mut matching = Vec::new();
 
     for def in definitions {

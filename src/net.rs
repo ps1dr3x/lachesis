@@ -13,16 +13,15 @@ use tokio::{
     time::timeout,
 };
 
-use super::worker::{PortStatus, Target, WorkerMessage};
+use super::worker::{PortStatus, PortTarget, ReqTarget, WorkerMessage};
 
-pub async fn test_port(ip: String, port: u16, timeout_millis: u64) -> PortStatus {
+pub async fn test_port(ip: String, port: u16, timeout_millis: u64) -> PortTarget {
     let addr = format!("{}:{}", ip, port).parse::<SocketAddr>().unwrap();
-    let mut port_status = PortStatus {
+    let mut port_target = PortTarget {
         ip,
         port,
-        open: false,
+        status: PortStatus::Closed,
         time: Instant::now(),
-        timeout: false,
     };
 
     match timeout(
@@ -33,14 +32,14 @@ pub async fn test_port(ip: String, port: u16, timeout_millis: u64) -> PortStatus
     {
         Ok(s) => match s {
             Ok(_) => {
-                port_status.open = true;
-                port_status
+                port_target.status = PortStatus::Open;
+                port_target
             }
-            Err(_) => port_status,
+            Err(_) => port_target,
         },
         Err(_) => {
-            port_status.timeout = true;
-            port_status
+            port_target.status = PortStatus::Timedout;
+            port_target
         }
     }
 }
@@ -48,7 +47,7 @@ pub async fn test_port(ip: String, port: u16, timeout_millis: u64) -> PortStatus
 pub struct HttpsRequest {
     pub tx: Sender<WorkerMessage>,
     pub client: Client<HttpsConnector<HttpConnector>>,
-    pub target: Target,
+    pub target: ReqTarget,
     pub user_agent: String,
     pub timeout: u64,
 }
@@ -126,7 +125,7 @@ pub async fn http_s(req: HttpsRequest) {
 
 pub struct TcpRequest {
     pub tx: Sender<WorkerMessage>,
-    pub target: Target,
+    pub target: ReqTarget,
     pub message: String,
     pub timeout: u64,
 }
