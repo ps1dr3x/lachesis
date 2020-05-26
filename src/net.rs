@@ -12,6 +12,7 @@ use tokio::{
     net::TcpStream,
     time::timeout,
 };
+use tokio_tls::TlsConnector;
 
 use super::worker::{PortStatus, PortTarget, ReqTarget, WorkerMessage};
 
@@ -42,6 +43,26 @@ pub async fn test_port(ip: String, port: u16, timeout_millis: u64) -> PortTarget
             port_target
         }
     }
+}
+
+pub fn build_https_client() -> Client<HttpsConnector<HttpConnector>> {
+    // TODOs:
+    // - Tweak connectors and client configuration
+    // - Try using rustls instead of native_tls as TLS connector
+    let mut http = HttpConnector::new();
+    //http.set_connect_timeout(Some(Duration::from_millis(1000)));
+    http.enforce_http(false);
+    let tls_connector = native_tls::TlsConnector::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap();
+    let tls_connector = TlsConnector::from(tls_connector);
+    let https = HttpsConnector::from((http, tls_connector));
+    Client::builder()
+        //.pool_idle_timeout(Duration::from_millis(1250))
+        //.http2_keep_alive_timeout(Duration::from_millis(1000))
+        //.retry_canceled_requests(false)
+        .build(https)
 }
 
 pub struct HttpsRequest {

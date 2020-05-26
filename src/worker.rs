@@ -12,32 +12,11 @@ use hyper::{client::HttpConnector, Client};
 use hyper_tls::HttpsConnector;
 use serde_derive::{Deserialize, Serialize};
 use tokio::{runtime, sync::Semaphore};
-use tokio_tls::TlsConnector;
 
 use crate::{
     conf::{Conf, Definition},
     net::{self, HttpsRequest, TcpRequest},
 };
-
-fn build_https_client() -> Client<HttpsConnector<HttpConnector>> {
-    // TODOs:
-    // - Tweak connectors and client configuration
-    // - Try using rustls instead of native_tls as TLS connector
-    let mut http = HttpConnector::new();
-    //http.set_connect_timeout(Some(Duration::from_millis(1000)));
-    http.enforce_http(false);
-    let tls_connector = native_tls::TlsConnector::builder()
-        .danger_accept_invalid_certs(true)
-        .build()
-        .unwrap();
-    let tls_connector = TlsConnector::from(tls_connector);
-    let https = HttpsConnector::from((http, tls_connector));
-    Client::builder()
-        //.pool_idle_timeout(Duration::from_millis(1250))
-        //.http2_keep_alive_timeout(Duration::from_millis(1000))
-        //.retry_canceled_requests(false)
-        .build(https)
-}
 
 #[derive(Debug, Clone)]
 pub struct ReqTarget {
@@ -250,7 +229,7 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
         .unwrap();
 
     rt.block_on(async {
-        let ws = WorkerState::new(conf, build_https_client());
+        let ws = WorkerState::new(conf, net::build_https_client());
 
         let mut targets = 0;
         while ws.conf.max_targets == 0 || targets < ws.conf.max_targets {
