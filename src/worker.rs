@@ -153,6 +153,10 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
     if !http_s_ports.is_empty() {
         for protocol in ["https", "http"].iter() {
             for port in &http_s_ports {
+                if (*port == 80 && *protocol == "https") || (*port == 443 && *protocol == "http") {
+                    continue;
+                }
+
                 ws.wait_for_permit().await;
 
                 let mut target = target.clone();
