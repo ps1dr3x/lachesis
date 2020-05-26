@@ -108,13 +108,7 @@ impl ReqTarget {
 
 async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: ReqTarget) {
     let tx_in = tx.clone();
-    let open_ports = check_ports(
-        tx_in,
-        ws.clone(),
-        &ws.conf.definitions,
-        target.ip.clone(),
-    )
-    .await;
+    let open_ports = check_ports(tx_in, ws.clone(), &ws.conf.definitions, target.ip.clone()).await;
 
     let mut http_s_ports = HashSet::new();
     for def in &ws.conf.definitions {
@@ -182,7 +176,6 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
 
     tx.send(WorkerMessage::NextTarget).unwrap();
 }
-
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DatasetRecord {
@@ -326,7 +319,9 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
 
             let ws_in = ws.clone();
             let tx = tx.clone();
-            tokio::spawn(async move { target_requests(tx, ws_in, target).await; });
+            tokio::spawn(async move {
+                target_requests(tx, ws_in, target).await;
+            });
             ws.targets_count += 1;
         }
 

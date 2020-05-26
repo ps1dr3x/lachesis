@@ -193,7 +193,9 @@ pub fn load() -> Result<Conf, &'static str> {
     let max_concurrent_requests = match value_t!(matches, "max_concurrent_requests", u64) {
         Ok(n) => n,
         Err(_) => {
-            return Err("Invalid value for parameter --max-concurrent-requests/-c (not a valid number)");
+            return Err(
+                "Invalid value for parameter --max-concurrent-requests/-c (not a valid number)",
+            );
         }
     };
 
