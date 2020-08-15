@@ -20,21 +20,21 @@
     "react": "=16.13.1",
     "react-dom": "=16.13.1",
     "semantic-ui-css": "=2.4.1",
-    "semantic-ui-react": "=0.88.2",
-    "uuid": "=7.0.3"
+    "semantic-ui-react": "=1.2.0",
+    "uuid": "=8.3.0"
   },
   "devDependencies": {
-    "@babel/core": "=7.9.0",
-    "@babel/preset-react": "=7.9.4",
+    "@babel/core": "=7.11.1",
+    "@babel/preset-react": "=7.10.4",
     "babel-loader": "=8.1.0",
-    "css-loader": "=3.5.2",
+    "css-loader": "=4.2.1",
     "file-loader": "=6.0.0",
-    "node-sass": "=4.13.1",
-    "sass-loader": "=8.0.2",
-    "style-loader": "=1.1.4",
+    "node-sass": "=4.14.1",
+    "sass-loader": "=9.0.3",
+    "style-loader": "=1.2.1",
     "url-loader": "=4.1.0",
-    "webpack": "=4.43.0",
-    "webpack-cli": "=3.3.11"
+    "webpack": "=4.44.1",
+    "webpack-cli": "=3.3.12"
   },
   "babel": {
     "presets": [
