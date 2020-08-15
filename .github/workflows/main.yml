@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [14.x]
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: (Rust) Install latest nightly
+        uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
+            override: true
+            components: rustfmt, clippy
+
+      - name: (Rust) Clippy
+        run: cargo clippy
+
+      - name: (Rust) Build
+        run: cargo build --release --verbose
+
+      - name: (Frontend) Install
+        run: npm ci
+
+      - name: (Frontend) Build
+        run: npm run build
+      
+
