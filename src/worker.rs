@@ -11,7 +11,7 @@ use futures::{stream::FuturesUnordered, StreamExt};
 use hyper::{client::HttpConnector, Client};
 use hyper_tls::HttpsConnector;
 use serde_derive::{Deserialize, Serialize};
-use tokio::{runtime, sync::Semaphore};
+use tokio::{runtime::Builder, sync::Semaphore};
 
 use crate::{
     conf::{Conf, Definition},
@@ -304,8 +304,8 @@ pub enum WorkerMessage {
 }
 
 pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
-    let mut rt = runtime::Builder::new()
-        .threaded_scheduler()
+    let rt = Builder::new_multi_thread()
+        .worker_threads(num_cpus::get())
         .enable_all()
         .build()
         .unwrap();
