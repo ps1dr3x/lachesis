@@ -1,5 +1,5 @@
 use crate::detector::DetectorResponse;
-use rusqlite::{types::ToSql, Connection, Error, NO_PARAMS};
+use rusqlite::{types::ToSql, Connection, Error};
 use serde_derive::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -44,7 +44,7 @@ impl DbMan {
                 port            INTEGER NOT NULL
             )
         ",
-            NO_PARAMS,
+            [],
         )?;
 
         Ok(DbMan { conn })
@@ -103,9 +103,9 @@ impl DbMan {
             services_vec.push(service?);
         }
 
-        let rows_count =
-            self.conn
-                .query_row("SELECT COUNT(*) FROM services", NO_PARAMS, |row| row.get(0))?;
+        let rows_count = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM services", [], |row| row.get(0))?;
 
         Ok(PaginatedServices {
             services: services_vec,

@@ -1,4 +1,4 @@
-#![feature(try_trait, termination_trait_lib, proc_macro_hygiene, decl_macro)]
+#![feature(try_trait, termination_trait_lib, decl_macro)]
 
 #[macro_use]
 extern crate clap;

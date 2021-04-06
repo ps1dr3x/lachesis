@@ -8,7 +8,7 @@ use std::{
 
 use easy_reader::EasyReader;
 use futures::{stream::FuturesUnordered, StreamExt};
-use hyper::{client::HttpConnector, Client};
+use hyper::client::{Client, HttpConnector};
 use hyper_tls::HttpsConnector;
 use serde_derive::{Deserialize, Serialize};
 use tokio::{runtime::Builder, sync::Semaphore};
@@ -217,10 +217,8 @@ fn get_next_target(conf: &Conf) -> Option<ReqTarget> {
                 ip = conf.subnets.lock().unwrap().0[current_subnet_idx].next();
             }
         }
-        match ip {
-            Some(ip) => Some(ReqTarget::new(ip.to_string(), ip.to_string())),
-            None => None,
-        }
+
+        ip.map(|ip| ReqTarget::new(ip.to_string(), ip.to_string()))
     }
 }
 
@@ -268,7 +266,7 @@ impl WorkerState {
     }
 
     async fn wait_for_permit(&self) {
-        self.semaphore.acquire().await.forget();
+        self.semaphore.acquire().await.unwrap().forget();
         self.requests.lock().unwrap().spawned += 1;
     }
 

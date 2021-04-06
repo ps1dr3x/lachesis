@@ -1,6 +1,6 @@
 {
   "name": "lachesis-web-ui",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "Michele Federici <michele@federici.tech> (@ps1dr3x)",
   "description": "Lachesis Web UI",
   "scripts": {

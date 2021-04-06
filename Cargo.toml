@@ -1,34 +1,34 @@
 [package]
 name = "lachesis"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Michele Federici (@ps1dr3x) <michele@federici.tech>"]
 edition = "2018"
 
 [dependencies]
 easy_reader = "=0.5.0"
-serde = "=1.0.117"
-serde_json = "=1.0.59"
-serde_derive = "=1.0.117"
-regex = "=1.4.1"
+serde = "=1.0.125"
+serde_json = "=1.0.64"
+serde_derive = "=1.0.125"
+regex = "=1.4.5"
 unindent = "=0.1.7"
 semver = "=0.11.0"
-native-tls = "=0.2.4"
-futures = "=0.3.6"
-tokio = { version = "=0.3.0", features = ["macros", "rt-multi-thread", "io-util", "net", "sync", "time"] }
-tokio-tls = "=0.3.1"
-hyper = "=0.13.8"
-hyper-tls = "=0.4.3"
+native-tls = "=0.2.7"
+futures = "=0.3.13"
+tokio = { version = "=1.4.0", features = ["macros", "rt-multi-thread", "io-util", "net", "sync", "time"] }
+tokio-native-tls = "=0.3.0"
+hyper = { version = "=0.14.5", features = ["client", "http2"] }
+hyper-tls = "=0.5.0"
 indicatif = "=0.15.0"
-rand = "=0.7.3"
+rand = "=0.8.3"
 colored = "=2.0.0"
 iprange = "=0.6.3"
 ipnet = "=2.3.0"
-validator = "=0.11.0"
-validator_derive = "=0.11.0"
-rocket = "=0.4.5"
-rocket_contrib = "=0.4.5"
+validator = "=0.13.0"
+validator_derive = "=0.13.0"
+rocket = "=0.4.7"
+rocket_contrib = "=0.4.7"
 headless_chrome = "=0.9.0"
-bytes = "=0.5.6"
+bytes = "=1.0.1"
 num_cpus = "=1.13.0"
 
 [dependencies.clap]
@@ -36,5 +36,5 @@ version = "=2.33.3"
 features = ["yaml"]
 
 [dependencies.rusqlite]
-version = "=0.24.1"
+version = "=0.25.0"
 features = ["bundled"]
