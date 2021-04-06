@@ -10,11 +10,11 @@ This project was born as a simple test of the Rust's networking (and asynchronou
 |  ,-. ,-. |-. ,-. ,-. . ,-. 
 |  ,-| |   | | |-' `-. | `-. 
 `' `-^ `-' ' ' `-' `-' ' `-'
-                      v0.2.0
+                      v0.3.0
 -------------8<-------------
 
 
-Lachesis v0.2.0
+Lachesis v0.3.0
 Michele Federici (@ps1dr3x) <michele@federici.tech>
 
 USAGE:
