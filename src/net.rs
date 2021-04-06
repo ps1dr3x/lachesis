@@ -5,14 +5,17 @@ use std::{
 };
 
 use bytes::Buf;
-use hyper::{client::HttpConnector, Body, Client, Request, Uri};
+use hyper::{
+    client::{Client, HttpConnector},
+    Body, Request, Uri,
+};
 use hyper_tls::HttpsConnector;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
     time::timeout,
 };
-use tokio_tls::TlsConnector;
+use tokio_native_tls::TlsConnector;
 
 use super::worker::{PortStatus, PortTarget, ReqTarget, WorkerMessage};
 
@@ -108,7 +111,7 @@ pub async fn http_s(req: HttpsRequest) {
         };
 
         match hyper::body::aggregate(body).await {
-            Ok(b) => {
+            Ok(mut b) => {
                 // Merge response's headers and body
                 let mut raw_content = format!("{:?} {}\r\n", parts.version, parts.status);
                 for header in &parts.headers {
@@ -119,7 +122,9 @@ pub async fn http_s(req: HttpsRequest) {
                         header.1.to_str().unwrap_or("")
                     );
                 }
-                raw_content = format!("{}\r\n{}", raw_content, String::from_utf8_lossy(b.bytes()));
+                let mut bytes = Vec::new();
+                b.copy_to_slice(&mut bytes);
+                raw_content = format!("{}\r\n{}", raw_content, String::from_utf8_lossy(&bytes));
                 req.target.response = raw_content;
 
                 req.tx
