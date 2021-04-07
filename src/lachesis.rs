@@ -1,14 +1,14 @@
 use std::{
     fmt::Debug,
     process::Termination,
-    sync::{
-        mpsc,
-        mpsc::{channel, Receiver, Sender},
-    },
     thread,
+    sync::mpsc as sync_mpsc,
 };
 
 use colored::Colorize;
+use tokio::sync::{
+    mpsc::{self, Receiver, Sender},
+};
 
 use crate::{
     browser,
@@ -77,7 +77,7 @@ fn handle_worker_response(
     ExitCode::Ok
 }
 
-fn run_worker(conf: &Conf) -> ExitCode {
+async fn run_worker(conf: &Conf) -> ExitCode {
     let mut stats = Stats::new(conf.max_targets);
 
     let dbm = match DbMan::init() {
@@ -88,15 +88,15 @@ fn run_worker(conf: &Conf) -> ExitCode {
         }
     };
 
-    let (tx, rx): (Sender<WorkerMessage>, Receiver<WorkerMessage>) = mpsc::channel();
+    let (tx, mut rx): (Sender<WorkerMessage>, Receiver<WorkerMessage>) = mpsc::channel(5);
 
     let in_conf = conf.clone();
     let thread = thread::spawn(move || worker::run(tx, in_conf));
 
     loop {
-        let msg = match rx.recv() {
-            Ok(msg) => msg,
-            Err(_) => continue,
+        let msg = match rx.recv().await {
+            Some(msg) => msg,
+            None => continue,
         };
 
         stats.update_avg_reqs_per_sec();
@@ -141,7 +141,7 @@ fn run_worker(conf: &Conf) -> ExitCode {
 }
 
 fn run_ui() -> ExitCode {
-    let (tx, rx): (Sender<UIMessage>, Receiver<UIMessage>) = channel();
+    let (tx, rx): (sync_mpsc::Sender<UIMessage>, sync_mpsc::Receiver<UIMessage>) = sync_mpsc::channel();
 
     thread::spawn(move || web::run(tx));
 
@@ -153,7 +153,8 @@ fn run_ui() -> ExitCode {
     }
 }
 
-pub fn run() -> ExitCode {
+#[tokio::main]
+pub async fn run() -> ExitCode {
     let conf = match conf::load() {
         Ok(conf) => conf,
         Err(err) => {
@@ -165,6 +166,6 @@ pub fn run() -> ExitCode {
     if conf.web_ui {
         run_ui()
     } else {
-        run_worker(&conf)
+        run_worker(&conf).await
     }
 }

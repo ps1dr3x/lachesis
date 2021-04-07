@@ -1,6 +1,5 @@
 use std::{
     net::SocketAddr,
-    sync::mpsc::Sender,
     time::{Duration, Instant},
 };
 
@@ -13,6 +12,7 @@ use hyper_tls::HttpsConnector;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
+    sync::mpsc::Sender,
     time::timeout,
 };
 use tokio_native_tls::TlsConnector;
@@ -105,6 +105,7 @@ pub async fn http_s(req: HttpsRequest) {
                         "Request error".to_string(),
                         Some(e.to_string()),
                     ))
+                    .await
                     .unwrap();
                 return;
             }
@@ -129,6 +130,7 @@ pub async fn http_s(req: HttpsRequest) {
 
                 req.tx
                     .send(WorkerMessage::Response(req.target.clone()))
+                    .await
                     .unwrap();
             }
             Err(e) => {
@@ -138,6 +140,7 @@ pub async fn http_s(req: HttpsRequest) {
                         "Response error".to_string(),
                         Some(e.to_string()),
                     ))
+                    .await
                     .unwrap();
             }
         };
@@ -145,6 +148,7 @@ pub async fn http_s(req: HttpsRequest) {
     if timeout(to, cb).await.is_err() {
         req.tx
             .send(WorkerMessage::Timeout(req.target.clone()))
+            .await
             .unwrap();
     }
 }
@@ -168,6 +172,7 @@ pub async fn tcp_custom(req: TcpRequest) {
                     "Invalid address".to_string(),
                     None,
                 ))
+                .await
                 .unwrap();
             return;
         }
@@ -184,6 +189,7 @@ pub async fn tcp_custom(req: TcpRequest) {
                         "TCP stream connection error".to_string(),
                         Some(e.to_string()),
                     ))
+                    .await
                     .unwrap();
                 return;
             }
@@ -196,6 +202,7 @@ pub async fn tcp_custom(req: TcpRequest) {
                     "TCP stream write error".to_string(),
                     Some(e.to_string()),
                 ))
+                .await
                 .unwrap();
             return;
         }
@@ -209,18 +216,21 @@ pub async fn tcp_custom(req: TcpRequest) {
                     "TCP stream read error".to_string(),
                     Some(e.to_string()),
                 ))
+                .await
                 .unwrap();
             return;
         }
         req.target.response = String::from_utf8_lossy(&answer).to_string();
         req.tx
             .send(WorkerMessage::Response(req.target.clone()))
+            .await
             .unwrap();
     };
 
     if timeout(to, cb).await.is_err() {
         req.tx
             .send(WorkerMessage::Timeout(req.target.clone()))
+            .await
             .unwrap();
     };
 }

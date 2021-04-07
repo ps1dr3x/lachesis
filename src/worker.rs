@@ -2,16 +2,15 @@ use std::{
     collections::HashSet,
     fs::File,
     path::Path,
-    sync::{mpsc::Sender, Arc, Mutex},
+    sync::Arc,
     time::Instant,
 };
 
 use easy_reader::EasyReader;
-use futures::{stream::FuturesUnordered, StreamExt};
 use hyper::client::{Client, HttpConnector};
 use hyper_tls::HttpsConnector;
 use serde_derive::{Deserialize, Serialize};
-use tokio::{runtime::Builder, sync::Semaphore};
+use tokio::{runtime::Builder, sync::{mpsc::Sender, Mutex, Semaphore}};
 
 use crate::{
     conf::{Conf, Definition},
@@ -41,38 +40,38 @@ async fn check_ports(
     }
 
     let open_ports = Arc::new(Mutex::new(unique_ports.clone()));
-    let mut futs = FuturesUnordered::new();
+    let mut handlers = Vec::new();
     for port in unique_ports {
         let tx = tx.clone();
         let ws = ws.clone();
         let ip = ip.clone();
         let open_ports = open_ports.clone();
-        futs.push(async move {
+        let handler = tokio::spawn(async move {
             ws.wait_for_permit().await;
 
             let now = Instant::now();
-            let timeout = ws.probe_time.lock().unwrap().timeout;
+            let timeout = ws.probe_time.lock().await.timeout;
             let port_target = net::test_port(ip, port, timeout as u64).await;
             if port_target.status != PortStatus::Open {
-                open_ports.lock().unwrap().remove(&port);
+                open_ports.lock().await.remove(&port);
             }
-            tx.send(WorkerMessage::PortTarget(port_target)).unwrap();
+            tx.send(WorkerMessage::PortTarget(port_target)).await.unwrap();
 
             let rtt = now.elapsed().as_millis() as f32;
-            let mut pt = ws.probe_time.lock().unwrap();
+            let mut pt = ws.probe_time.lock().await;
             pt.timeout = estimate_timeout(pt.srtt, rtt, pt.rttvar);
 
-            ws.release_permit();
+            ws.release_permit().await;
         });
+
+        handlers.push(handler);
     }
 
-    loop {
-        if futs.next().await.is_none() {
-            break;
-        }
+    for handler in handlers {
+        handler.await.unwrap();
     }
 
-    Arc::try_unwrap(open_ports).unwrap().into_inner().unwrap()
+    Arc::try_unwrap(open_ports).unwrap().into_inner()
 }
 
 #[derive(Debug, Clone)]
@@ -143,7 +142,7 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
                     };
                     net::tcp_custom(req).await;
 
-                    ws.release_permit();
+                    ws.release_permit().await;
                 }
             }
             // Protocol field is already validated when conf is loaded
@@ -173,12 +172,12 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
                 };
                 net::http_s(req).await;
 
-                ws.release_permit();
+                ws.release_permit().await;
             }
         }
     }
 
-    tx.send(WorkerMessage::NextTarget).unwrap();
+    tx.send(WorkerMessage::NextTarget).await.unwrap();
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -267,12 +266,12 @@ impl WorkerState {
 
     async fn wait_for_permit(&self) {
         self.semaphore.acquire().await.unwrap().forget();
-        self.requests.lock().unwrap().spawned += 1;
+        self.requests.lock().await.spawned += 1;
     }
 
-    fn release_permit(&self) {
+    async fn release_permit(&self) {
         self.semaphore.add_permits(1);
-        self.requests.lock().unwrap().completed += 1;
+        self.requests.lock().await.completed += 1;
     }
 }
 
@@ -329,12 +328,12 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
 
         // Wait for existing connections to complete
         loop {
-            let reqs = ws.requests.lock().unwrap();
+            let reqs = ws.requests.lock().await;
             if reqs.completed == reqs.spawned {
                 break;
             }
         }
 
-        tx.send(WorkerMessage::Shutdown).unwrap();
+        tx.send(WorkerMessage::Shutdown).await.unwrap();
     });
 }
