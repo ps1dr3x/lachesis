@@ -10,7 +10,7 @@ use crate::{
     detector,
     stats::Stats,
     web::{self, UIMessage},
-    worker::{self, ReqTarget, WorkerMessage},
+    worker::{self, ReqTarget, WorkerMessage, PortStatus},
 };
 
 #[derive(Debug, PartialEq)]
@@ -96,7 +96,12 @@ async fn run_worker(conf: &Conf) -> ExitCode {
 
         match msg {
             WorkerMessage::PortTarget(port_target) => {
+                if port_target.status == PortStatus::Open {
+                    stats.update_req_avg_time(port_target.time, "port");
+                }
+
                 stats.update_ports_stats(port_target.status);
+
                 continue;
             }
             WorkerMessage::Fail(target, error_context, error) => {
