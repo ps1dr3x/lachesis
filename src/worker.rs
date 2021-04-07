@@ -1,16 +1,13 @@
-use std::{
-    collections::HashSet,
-    fs::File,
-    path::Path,
-    sync::Arc,
-    time::Instant,
-};
+use std::{collections::HashSet, fs::File, path::Path, sync::Arc, time::Instant};
 
 use easy_reader::EasyReader;
 use hyper::client::{Client, HttpConnector};
 use hyper_tls::HttpsConnector;
 use serde_derive::{Deserialize, Serialize};
-use tokio::{runtime::Builder, sync::{mpsc::Sender, Mutex, Semaphore}};
+use tokio::{
+    runtime::Builder,
+    sync::{mpsc::Sender, Mutex, Semaphore},
+};
 
 use crate::{
     conf::{Conf, Definition},
@@ -55,7 +52,9 @@ async fn check_ports(
             if port_target.status != PortStatus::Open {
                 open_ports.lock().await.remove(&port);
             }
-            tx.send(WorkerMessage::PortTarget(port_target)).await.unwrap();
+            tx.send(WorkerMessage::PortTarget(port_target))
+                .await
+                .unwrap();
 
             let rtt = now.elapsed().as_millis() as f32;
             let mut pt = ws.probe_time.lock().await;

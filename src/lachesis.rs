@@ -1,14 +1,7 @@
-use std::{
-    fmt::Debug,
-    process::Termination,
-    thread,
-    sync::mpsc as sync_mpsc,
-};
+use std::{fmt::Debug, process::Termination, sync::mpsc as sync_mpsc, thread};
 
 use colored::Colorize;
-use tokio::sync::{
-    mpsc::{self, Receiver, Sender},
-};
+use tokio::sync::mpsc::{self, Receiver, Sender};
 
 use crate::{
     browser,
@@ -88,7 +81,7 @@ async fn run_worker(conf: &Conf) -> ExitCode {
         }
     };
 
-    let (tx, mut rx): (Sender<WorkerMessage>, Receiver<WorkerMessage>) = mpsc::channel(5);
+    let (tx, mut rx): (Sender<WorkerMessage>, Receiver<WorkerMessage>) = mpsc::channel(1000000);
 
     let in_conf = conf.clone();
     let thread = thread::spawn(move || worker::run(tx, in_conf));
@@ -141,7 +134,8 @@ async fn run_worker(conf: &Conf) -> ExitCode {
 }
 
 fn run_ui() -> ExitCode {
-    let (tx, rx): (sync_mpsc::Sender<UIMessage>, sync_mpsc::Receiver<UIMessage>) = sync_mpsc::channel();
+    let (tx, rx): (sync_mpsc::Sender<UIMessage>, sync_mpsc::Receiver<UIMessage>) =
+        sync_mpsc::channel();
 
     thread::spawn(move || web::run(tx));
 
