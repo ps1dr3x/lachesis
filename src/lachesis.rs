@@ -10,7 +10,7 @@ use crate::{
     detector,
     stats::Stats,
     web::{self, UIMessage},
-    worker::{self, ReqTarget, WorkerMessage, PortStatus},
+    worker::{self, ReqTarget, WorkerMessage},
 };
 
 #[derive(Debug, PartialEq)]
@@ -81,7 +81,7 @@ async fn run_worker(conf: &Conf) -> ExitCode {
         }
     };
 
-    let (tx, mut rx): (Sender<WorkerMessage>, Receiver<WorkerMessage>) = mpsc::channel(1000000);
+    let (tx, mut rx): (Sender<WorkerMessage>, Receiver<WorkerMessage>) = mpsc::channel(100000);
 
     let in_conf = conf.clone();
     let thread = thread::spawn(move || worker::run(tx, in_conf));
@@ -96,12 +96,7 @@ async fn run_worker(conf: &Conf) -> ExitCode {
 
         match msg {
             WorkerMessage::PortTarget(port_target) => {
-                if port_target.status == PortStatus::Open {
-                    stats.update_req_avg_time(port_target.time, "port");
-                }
-
-                stats.update_ports_stats(port_target.status);
-
+                stats.update_ports_stats(port_target.status, port_target.time);
                 continue;
             }
             WorkerMessage::Fail(target, error_context, error) => {
@@ -119,6 +114,7 @@ async fn run_worker(conf: &Conf) -> ExitCode {
                 continue;
             }
             WorkerMessage::Response(target) => {
+                println!("target: {:?}", target);
                 stats.update_req_avg_time(target.time, &target.protocol);
                 if handle_worker_response(conf, &mut stats, &dbm, target) == ExitCode::Err {
                     return ExitCode::Err;

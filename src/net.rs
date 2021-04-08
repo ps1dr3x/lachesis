@@ -76,9 +76,7 @@ pub struct HttpsRequest {
     pub timeout: u64,
 }
 
-pub async fn http_s(req: HttpsRequest) {
-    let mut req = req;
-
+pub async fn http_s(mut req: HttpsRequest) {
     let uri: Uri = format!(
         "{}://{}:{}",
         req.target.protocol, req.target.ip, req.target.port
@@ -145,6 +143,7 @@ pub async fn http_s(req: HttpsRequest) {
             }
         };
     };
+
     if timeout(to, cb).await.is_err() {
         req.tx
             .send(WorkerMessage::Timeout(req.target.clone()))
@@ -160,9 +159,7 @@ pub struct TcpRequest {
     pub timeout: u64,
 }
 
-pub async fn tcp_custom(req: TcpRequest) {
-    let mut req = req;
-
+pub async fn tcp_custom(mut req: TcpRequest) {
     let addr = match format!("{}:{}", req.target.ip, req.target.port).parse::<SocketAddr>() {
         Ok(addr) => addr,
         Err(_e) => {
