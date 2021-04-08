@@ -28,12 +28,7 @@ impl Termination for ExitCode {
     }
 }
 
-fn handle_worker_response(
-    conf: &Conf,
-    stats: &mut Stats,
-    dbm: &DbMan,
-    target: ReqTarget,
-) {
+fn handle_worker_response(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target: ReqTarget) {
     stats.update_req_avg_time(target.time, &target.protocol);
 
     stats.log_response(&target);

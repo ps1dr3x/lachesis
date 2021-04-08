@@ -187,7 +187,7 @@ pub struct DatasetRecord {
     pub value: String,
 }
 
-fn get_next_target(conf: &Conf) -> Option<ReqTarget> {
+async fn get_next_target(conf: &Conf) -> Option<ReqTarget> {
     if !conf.dataset.is_empty() {
         // If dataset mode, pick a random dns record
         // (excluding records which are not of type A)
@@ -204,15 +204,15 @@ fn get_next_target(conf: &Conf) -> Option<ReqTarget> {
         }
     } else {
         // If subnet mode, pick the next ip in the specified subnets
-        let mut current_subnet_idx = conf.subnets.lock().unwrap().1;
-        let mut ip = conf.subnets.lock().unwrap().0[current_subnet_idx].next();
+        let mut current_subnet_idx = conf.subnets.lock().await.1;
+        let mut ip = conf.subnets.lock().await.0[current_subnet_idx].next();
         while ip.is_none() {
-            conf.subnets.lock().unwrap().1 += 1;
-            current_subnet_idx = conf.subnets.lock().unwrap().1;
-            if current_subnet_idx >= conf.subnets.lock().unwrap().0.len() {
+            conf.subnets.lock().await.1 += 1;
+            current_subnet_idx = conf.subnets.lock().await.1;
+            if current_subnet_idx >= conf.subnets.lock().await.0.len() {
                 break;
             } else {
-                ip = conf.subnets.lock().unwrap().0[current_subnet_idx].next();
+                ip = conf.subnets.lock().await.0[current_subnet_idx].next();
             }
         }
 
@@ -310,7 +310,7 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
         let mut ws = WorkerState::new(conf, net::build_https_client());
 
         while ws.conf.max_targets == 0 || ws.targets_count < ws.conf.max_targets {
-            let target = if let Some(target) = get_next_target(&ws.conf) {
+            let target = if let Some(target) = get_next_target(&ws.conf).await {
                 target
             } else {
                 // All the targets have been consumed
