@@ -36,7 +36,7 @@ impl Conf {
             user_agent: String::new(),
             max_targets: 0,
             req_timeout: 10,
-            max_concurrent_requests: 500,
+            max_concurrent_requests: 1000,
             debug: false,
             web_ui: false,
         }
