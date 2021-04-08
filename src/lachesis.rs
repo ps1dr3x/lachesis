@@ -1,14 +1,7 @@
-use std::{
-    fmt::Debug,
-    process::Termination,
-    sync::{
-        mpsc,
-        mpsc::{channel, Receiver, Sender},
-    },
-    thread,
-};
+use std::{fmt::Debug, process::Termination, sync::mpsc as sync_mpsc, thread};
 
 use colored::Colorize;
+use tokio::sync::mpsc::{self, Receiver, Sender};
 
 use crate::{
     browser,
@@ -35,19 +28,16 @@ impl Termination for ExitCode {
     }
 }
 
-fn handle_worker_response(
-    conf: &Conf,
-    stats: &mut Stats,
-    dbm: &DbMan,
-    target: ReqTarget,
-) -> ExitCode {
+fn handle_worker_response(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target: ReqTarget) {
+    stats.update_req_avg_time(target.time, &target.protocol);
+
     stats.log_response(&target);
 
-    let responses = detector::detect(&target, &conf.definitions);
+    let det_responses = detector::detect(&target, &conf.definitions);
 
     let mut matching = false;
-    if !responses.is_empty() {
-        for res in responses {
+    if !det_responses.is_empty() {
+        for res in det_responses {
             if let Some(error) = res.error {
                 stats.log_int_err(error);
                 continue;
@@ -64,7 +54,7 @@ fn handle_worker_response(
                         "Error while saving a matching service in the embedded db: {}",
                         err
                     ));
-                    return ExitCode::Err;
+                    continue;
                 }
             };
 
@@ -73,11 +63,9 @@ fn handle_worker_response(
     }
 
     stats.increment_successful(&target.protocol, matching);
-
-    ExitCode::Ok
 }
 
-fn run_worker(conf: &Conf) -> ExitCode {
+async fn run_worker(conf: &Conf) -> ExitCode {
     let mut stats = Stats::new(conf.max_targets);
 
     let dbm = match DbMan::init() {
@@ -88,22 +76,22 @@ fn run_worker(conf: &Conf) -> ExitCode {
         }
     };
 
-    let (tx, rx): (Sender<WorkerMessage>, Receiver<WorkerMessage>) = mpsc::channel();
+    let (tx, mut rx): (Sender<WorkerMessage>, Receiver<WorkerMessage>) = mpsc::channel(100000);
 
     let in_conf = conf.clone();
     let thread = thread::spawn(move || worker::run(tx, in_conf));
 
     loop {
-        let msg = match rx.recv() {
-            Ok(msg) => msg,
-            Err(_) => continue,
+        let msg = match rx.recv().await {
+            Some(msg) => msg,
+            None => continue,
         };
 
         stats.update_avg_reqs_per_sec();
 
         match msg {
             WorkerMessage::PortTarget(port_target) => {
-                stats.update_ports_stats(port_target.status);
+                stats.update_ports_stats(port_target.status, port_target.time);
                 continue;
             }
             WorkerMessage::Fail(target, error_context, error) => {
@@ -121,12 +109,13 @@ fn run_worker(conf: &Conf) -> ExitCode {
                 continue;
             }
             WorkerMessage::Response(target) => {
-                stats.update_req_avg_time(target.time, &target.protocol);
-                if handle_worker_response(conf, &mut stats, &dbm, target) == ExitCode::Err {
-                    return ExitCode::Err;
-                }
+                handle_worker_response(conf, &mut stats, &dbm, target);
+                continue;
             }
-            WorkerMessage::NextTarget => stats.increment_targets(),
+            WorkerMessage::NextTarget => {
+                stats.increment_targets();
+                continue;
+            }
             WorkerMessage::Shutdown => break,
         };
     }
@@ -141,7 +130,8 @@ fn run_worker(conf: &Conf) -> ExitCode {
 }
 
 fn run_ui() -> ExitCode {
-    let (tx, rx): (Sender<UIMessage>, Receiver<UIMessage>) = channel();
+    let (tx, rx): (sync_mpsc::Sender<UIMessage>, sync_mpsc::Receiver<UIMessage>) =
+        sync_mpsc::channel();
 
     thread::spawn(move || web::run(tx));
 
@@ -153,7 +143,8 @@ fn run_ui() -> ExitCode {
     }
 }
 
-pub fn run() -> ExitCode {
+#[tokio::main]
+pub async fn run() -> ExitCode {
     let conf = match conf::load() {
         Ok(conf) => conf,
         Err(err) => {
@@ -165,6 +156,6 @@ pub fn run() -> ExitCode {
     if conf.web_ui {
         run_ui()
     } else {
-        run_worker(&conf)
+        run_worker(&conf).await
     }
 }

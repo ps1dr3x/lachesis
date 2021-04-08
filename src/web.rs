@@ -1,11 +1,13 @@
-use crate::db::{DbMan, PaginatedServices};
 use colored::Colorize;
 use rocket::{self, http::Status, request::Form, response::NamedFile, Request, State};
 use rocket_contrib::json::Json;
+
 use std::{
     path::{Path, PathBuf},
-    sync::{mpsc, Arc, Mutex},
+    sync::{mpsc::Sender, Arc, Mutex},
 };
+
+use crate::db::{DbMan, PaginatedServices};
 
 #[derive(Debug, Clone)]
 pub struct UIMessage {
@@ -31,7 +33,7 @@ fn static_files(file: PathBuf) -> Result<NamedFile, Status> {
 
 #[get("/services?<params..>")]
 fn services(
-    tx: State<Arc<Mutex<mpsc::Sender<UIMessage>>>>,
+    tx: State<Arc<Mutex<Sender<UIMessage>>>>,
     params: Form<Pagination>,
 ) -> Result<Json<PaginatedServices>, Status> {
     let db = match DbMan::init() {
@@ -63,7 +65,7 @@ fn services(
 
 #[delete("/services", format = "application/json", data = "<ids>")]
 fn del_services(
-    tx: State<Arc<Mutex<mpsc::Sender<UIMessage>>>>,
+    tx: State<Arc<Mutex<Sender<UIMessage>>>>,
     ids: Json<Vec<u32>>,
 ) -> Result<&str, Status> {
     let db = match DbMan::init() {
@@ -103,7 +105,7 @@ fn internal_server_error(_req: &Request) -> &'static str {
     "Internal server error :("
 }
 
-pub fn run(tx: mpsc::Sender<UIMessage>) {
+pub fn run(tx: Sender<UIMessage>) {
     rocket::ignite()
         .mount("/", routes![home, static_files])
         .mount("/api", routes![services, del_services])

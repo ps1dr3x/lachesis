@@ -1,12 +1,13 @@
 use std::{
     fs::{self, File},
     path::Path,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use clap::App;
 use ipnet::{Ipv4AddrRange, Ipv4Net};
 use serde_derive::{Deserialize, Serialize};
+use tokio::sync::Mutex;
 use validator::Validate;
 
 use crate::validators::{
@@ -36,7 +37,7 @@ impl Conf {
             user_agent: String::new(),
             max_targets: 0,
             req_timeout: 10,
-            max_concurrent_requests: 500,
+            max_concurrent_requests: 1000,
             debug: false,
             web_ui: false,
         }

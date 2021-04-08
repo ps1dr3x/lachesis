@@ -137,9 +137,12 @@ impl Stats {
         }
     }
 
-    pub fn update_ports_stats(&mut self, port_status: PortStatus) {
+    pub fn update_ports_stats(&mut self, port_status: PortStatus, time: Instant) {
         match port_status {
-            PortStatus::Open => self.increment_successful("port", false),
+            PortStatus::Open => {
+                self.update_req_avg_time(time, "port");
+                self.increment_successful("port", false);
+            }
             PortStatus::Closed => self.increment_failed("port"),
             PortStatus::Timedout => self.increment_timedout("port"),
         };

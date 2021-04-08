@@ -53,7 +53,7 @@ OPTIONS:
                                              File name with or without extension (eg. vnc.json or vnc)
                                               
     -c, --max-concurrent-requests <NUM>    Sets the maximum number of concurrent requests
-                                            [default: 500]
+                                            [default: 1000]
     -m, --max-targets <NUM>                Sets a maximum limit of targets
                                             
     -t, --req-timeout <NUM>                Sets a maximum timeout for each request (seconds)
@@ -61,7 +61,7 @@ OPTIONS:
     -S, --subnet <SUBNET>...               Scan one or more subnets
                                             
     -u, --user-agent <STRING>              Sets a custom user agent (http/https)
-                                            [default: lachesis/0.2.0]
+                                            [default: lachesis/0.3.0]
 ```
 
 ## Roadmap / TODOs
