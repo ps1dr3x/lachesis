@@ -33,14 +33,16 @@ fn handle_worker_response(
     stats: &mut Stats,
     dbm: &DbMan,
     target: ReqTarget,
-) -> ExitCode {
+) {
+    stats.update_req_avg_time(target.time, &target.protocol);
+
     stats.log_response(&target);
 
-    let responses = detector::detect(&target, &conf.definitions);
+    let det_responses = detector::detect(&target, &conf.definitions);
 
     let mut matching = false;
-    if !responses.is_empty() {
-        for res in responses {
+    if !det_responses.is_empty() {
+        for res in det_responses {
             if let Some(error) = res.error {
                 stats.log_int_err(error);
                 continue;
@@ -57,7 +59,7 @@ fn handle_worker_response(
                         "Error while saving a matching service in the embedded db: {}",
                         err
                     ));
-                    return ExitCode::Err;
+                    continue;
                 }
             };
 
@@ -66,8 +68,6 @@ fn handle_worker_response(
     }
 
     stats.increment_successful(&target.protocol, matching);
-
-    ExitCode::Ok
 }
 
 async fn run_worker(conf: &Conf) -> ExitCode {
@@ -114,13 +114,13 @@ async fn run_worker(conf: &Conf) -> ExitCode {
                 continue;
             }
             WorkerMessage::Response(target) => {
-                println!("target: {:?}", target);
-                stats.update_req_avg_time(target.time, &target.protocol);
-                if handle_worker_response(conf, &mut stats, &dbm, target) == ExitCode::Err {
-                    return ExitCode::Err;
-                }
+                handle_worker_response(conf, &mut stats, &dbm, target);
+                continue;
             }
-            WorkerMessage::NextTarget => stats.increment_targets(),
+            WorkerMessage::NextTarget => {
+                stats.increment_targets();
+                continue;
+            }
             WorkerMessage::Shutdown => break,
         };
     }
