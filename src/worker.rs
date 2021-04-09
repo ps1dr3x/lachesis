@@ -107,79 +107,88 @@ impl ReqTarget {
 }
 
 async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: ReqTarget) {
-    let tx_in = tx.clone();
-    let open_ports = check_ports(tx_in, ws.clone(), &ws.conf.definitions, target.ip.clone()).await;
+    tokio::spawn(async move {
+        let open_ports = check_ports(
+            tx.clone(),
+            ws.clone(),
+            &ws.conf.definitions,
+            target.ip.clone(),
+        )
+        .await;
 
-    let mut http_s_ports = HashSet::new();
-    for def in &ws.conf.definitions {
-        match def.protocol.as_str() {
-            "http/s" => {
-                // Only one http/s request per port
-                for port in &def.options.ports {
-                    if open_ports.contains(port) {
-                        http_s_ports.insert(*port);
+        let mut http_s_ports = HashSet::new();
+        for def in &ws.conf.definitions {
+            match def.protocol.as_str() {
+                "http/s" => {
+                    // Only one http/s request per port
+                    for port in &def.options.ports {
+                        if open_ports.contains(port) {
+                            http_s_ports.insert(*port);
+                        }
                     }
                 }
+                "tcp/custom" => {
+                    for port in &def.options.ports {
+                        if !open_ports.contains(port) {
+                            continue;
+                        }
+
+                        ws.maybe_wait_for_permit().await;
+
+                        let mut target = target.clone();
+                        target.domain = String::new();
+                        target.protocol = "tcp/custom".to_string();
+                        target.port = *port;
+                        target.time = Instant::now();
+
+                        let req = TcpRequest {
+                            tx: tx.clone(),
+                            target: target.clone(),
+                            message: def.options.message.clone().unwrap(),
+                            timeout: ws.conf.req_timeout,
+                        };
+                        net::tcp_custom(req).await;
+
+                        ws.maybe_release_permit().await;
+                    }
+                }
+                // Protocol field is already validated when conf is loaded
+                _ => (),
             }
-            "tcp/custom" => {
-                for port in &def.options.ports {
-                    if !open_ports.contains(port) {
+        }
+
+        if !http_s_ports.is_empty() {
+            for protocol in ["https", "http"].iter() {
+                for port in &http_s_ports {
+                    if (*port == 80 && *protocol == "https")
+                        || (*port == 443 && *protocol == "http")
+                    {
                         continue;
                     }
 
                     ws.maybe_wait_for_permit().await;
 
                     let mut target = target.clone();
-                    target.domain = String::new();
-                    target.protocol = "tcp/custom".to_string();
+                    target.protocol = protocol.to_string();
                     target.port = *port;
                     target.time = Instant::now();
 
-                    let req = TcpRequest {
+                    let req = HttpsRequest {
                         tx: tx.clone(),
+                        client: ws.https_client.clone(),
                         target: target.clone(),
-                        message: def.options.message.clone().unwrap(),
+                        user_agent: ws.conf.user_agent.clone(),
                         timeout: ws.conf.req_timeout,
                     };
-                    net::tcp_custom(req).await;
+                    net::http_s(req).await;
 
                     ws.maybe_release_permit().await;
                 }
             }
-            // Protocol field is already validated when conf is loaded
-            _ => (),
         }
-    }
 
-    if !http_s_ports.is_empty() {
-        for protocol in ["https", "http"].iter() {
-            for port in &http_s_ports {
-                if (*port == 80 && *protocol == "https") || (*port == 443 && *protocol == "http") {
-                    continue;
-                }
-
-                ws.maybe_wait_for_permit().await;
-
-                let mut target = target.clone();
-                target.protocol = protocol.to_string();
-                target.port = *port;
-                target.time = Instant::now();
-
-                let req = HttpsRequest {
-                    tx: tx.clone(),
-                    client: ws.https_client.clone(),
-                    target: target.clone(),
-                    user_agent: ws.conf.user_agent.clone(),
-                    timeout: ws.conf.req_timeout,
-                };
-                net::http_s(req).await;
-
-                ws.maybe_release_permit().await;
-            }
-        }
-    }
-
-    tx.send(WorkerMessage::NextTarget).await.unwrap();
+        tx.send(WorkerMessage::NextTarget).await.unwrap();
+    });
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -190,37 +199,35 @@ pub struct DatasetRecord {
     pub value: String,
 }
 
-async fn get_next_target(conf: &Conf) -> Option<ReqTarget> {
-    if !conf.dataset.is_empty() {
-        // If dataset mode, pick a random dns record
-        // (excluding records which are not of type A)
-        let dataset_path = Path::new(conf.dataset.as_str());
-        let dataset_file = File::open(dataset_path).unwrap();
-        let mut easy_reader = EasyReader::new(dataset_file).unwrap();
-        loop {
-            let line_str = easy_reader.random_line().unwrap().unwrap();
-            let dataset_record: DatasetRecord = serde_json::from_str(&line_str).unwrap();
-            if dataset_record.record_type != "a" {
-                continue;
-            }
-            return Some(ReqTarget::new(dataset_record.name, dataset_record.value));
+// Pick a random dns record from the dataset
+// (excluding records which are not of type A)
+async fn get_next_dataset_target(dataset: &mut EasyReader<File>) -> Option<ReqTarget> {
+    loop {
+        let line_str = dataset.random_line().unwrap().unwrap();
+        let dataset_record: DatasetRecord = serde_json::from_str(&line_str).unwrap();
+        if dataset_record.record_type != "a" {
+            continue;
         }
-    } else {
-        // If subnet mode, pick the next ip in the specified subnets
-        let mut current_subnet_idx = conf.subnets.lock().await.1;
-        let mut ip = conf.subnets.lock().await.0[current_subnet_idx].next();
-        while ip.is_none() {
-            conf.subnets.lock().await.1 += 1;
-            current_subnet_idx = conf.subnets.lock().await.1;
-            if current_subnet_idx >= conf.subnets.lock().await.0.len() {
-                break;
-            } else {
-                ip = conf.subnets.lock().await.0[current_subnet_idx].next();
-            }
-        }
-
-        ip.map(|ip| ReqTarget::new(ip.to_string(), ip.to_string()))
+        return Some(ReqTarget::new(dataset_record.name, dataset_record.value));
     }
+}
+
+// Pick the next ip in the specified subnets
+async fn get_next_subnet_target(conf: &Conf) -> Option<ReqTarget> {
+    let mut current_subnet_idx = conf.subnets.lock().await.1;
+    let mut ip = conf.subnets.lock().await.0[current_subnet_idx].next();
+
+    while ip.is_none() {
+        conf.subnets.lock().await.1 += 1;
+        current_subnet_idx = conf.subnets.lock().await.1;
+        if current_subnet_idx >= conf.subnets.lock().await.0.len() {
+            break;
+        } else {
+            ip = conf.subnets.lock().await.0[current_subnet_idx].next();
+        }
+    }
+
+    ip.map(|ip| ReqTarget::new(ip.to_string(), ip.to_string()))
 }
 
 #[derive(Debug, Clone)]
@@ -319,24 +326,36 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
     rt.block_on(async {
         let mut ws = WorkerState::new(conf, net::build_https_client());
 
-        while ws.conf.max_targets == 0 || ws.targets_count < ws.conf.max_targets {
-            // TODO - Try passing the reader instance to avoid opening and closing the file
-            // for each entry (dataset mode)
-            let target = if let Some(target) = get_next_target(&ws.conf).await {
-                target
-            } else {
-                // All the targets have been consumed
-                break;
-            };
+        if !ws.conf.dataset.is_empty() {
+            let mut dataset =
+                EasyReader::new(File::open(Path::new(&ws.conf.dataset)).unwrap()).unwrap();
 
-            let ws_in = ws.clone();
-            let tx = tx.clone();
-            tokio::spawn(async move {
-                target_requests(tx, ws_in, target).await;
-            });
+            while ws.conf.max_targets == 0 || ws.targets_count < ws.conf.max_targets {
+                let target = if let Some(target) = get_next_dataset_target(&mut dataset).await {
+                    target
+                } else {
+                    // All the targets have been consumed
+                    break;
+                };
 
-            ws.targets_count += 1;
-        }
+                target_requests(tx.clone(), ws.clone(), target).await;
+
+                ws.targets_count += 1;
+            }
+        } else {
+            while ws.conf.max_targets == 0 || ws.targets_count < ws.conf.max_targets {
+                let target = if let Some(target) = get_next_subnet_target(&ws.conf).await {
+                    target
+                } else {
+                    // All the targets have been consumed
+                    break;
+                };
+
+                target_requests(tx.clone(), ws.clone(), target).await;
+
+                ws.targets_count += 1;
+            }
+        };
 
         // Wait for existing connections to complete
         loop {
