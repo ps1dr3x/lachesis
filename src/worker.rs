@@ -44,14 +44,16 @@ async fn check_ports(
         let ip = ip.clone();
         let open_ports = open_ports.clone();
         let handler = tokio::spawn(async move {
-            ws.wait_for_permit().await;
+            ws.maybe_wait_for_permit().await;
 
             let now = Instant::now();
             let timeout = ws.probe_time.lock().await.timeout;
             let port_target = net::test_port(ip, port, timeout as u64).await;
+
             if port_target.status != PortStatus::Open {
                 open_ports.lock().await.remove(&port);
             }
+
             tx.send(WorkerMessage::PortTarget(port_target))
                 .await
                 .unwrap();
@@ -60,7 +62,7 @@ async fn check_ports(
             let mut pt = ws.probe_time.lock().await;
             pt.timeout = estimate_timeout(pt.srtt, rtt, pt.rttvar);
 
-            ws.release_permit().await;
+            ws.maybe_release_permit().await;
         });
 
         handlers.push(handler);
@@ -125,7 +127,7 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
                         continue;
                     }
 
-                    ws.wait_for_permit().await;
+                    ws.maybe_wait_for_permit().await;
 
                     let mut target = target.clone();
                     target.domain = String::new();
@@ -141,13 +143,14 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
                     };
                     net::tcp_custom(req).await;
 
-                    ws.release_permit().await;
+                    ws.maybe_release_permit().await;
                 }
             }
             // Protocol field is already validated when conf is loaded
             _ => (),
         }
     }
+
     if !http_s_ports.is_empty() {
         for protocol in ["https", "http"].iter() {
             for port in &http_s_ports {
@@ -155,7 +158,7 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
                     continue;
                 }
 
-                ws.wait_for_permit().await;
+                ws.maybe_wait_for_permit().await;
 
                 let mut target = target.clone();
                 target.protocol = protocol.to_string();
@@ -171,7 +174,7 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
                 };
                 net::http_s(req).await;
 
-                ws.release_permit().await;
+                ws.maybe_release_permit().await;
             }
         }
     }
@@ -245,7 +248,8 @@ struct WorkerState {
 
 impl WorkerState {
     fn new(conf: Conf, https_client: Client<HttpsConnector<HttpConnector>>) -> Self {
-        let max_concurrent_requests = conf.max_concurrent_requests as usize;
+        let max_concurrent_requests = conf.max_concurrent_requests;
+
         Self {
             conf,
             https_client,
@@ -263,13 +267,19 @@ impl WorkerState {
         }
     }
 
-    async fn wait_for_permit(&self) {
-        self.semaphore.acquire().await.unwrap().forget();
+    async fn maybe_wait_for_permit(&self) {
+        if self.conf.max_concurrent_requests != 0 {
+            self.semaphore.acquire().await.unwrap().forget();
+        }
+
         self.requests.lock().await.spawned += 1;
     }
 
-    async fn release_permit(&self) {
-        self.semaphore.add_permits(1);
+    async fn maybe_release_permit(&self) {
+        if self.conf.max_concurrent_requests != 0 {
+            self.semaphore.add_permits(1);
+        }
+
         self.requests.lock().await.completed += 1;
     }
 }
@@ -310,6 +320,8 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
         let mut ws = WorkerState::new(conf, net::build_https_client());
 
         while ws.conf.max_targets == 0 || ws.targets_count < ws.conf.max_targets {
+            // TODO - Try passing the reader instance to avoid opening and closing the file
+            // for each entry (dataset mode)
             let target = if let Some(target) = get_next_target(&ws.conf).await {
                 target
             } else {
@@ -322,6 +334,7 @@ pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
             tokio::spawn(async move {
                 target_requests(tx, ws_in, target).await;
             });
+
             ws.targets_count += 1;
         }
 

@@ -52,8 +52,8 @@ OPTIONS:
                                            Accepted formats are:
                                              File name with or without extension (eg. vnc.json or vnc)
                                               
-    -c, --max-concurrent-requests <NUM>    Sets the maximum number of concurrent requests
-                                            [default: 1000]
+    -c, --max-concurrent-requests <NUM>    Sets a maximum number of concurrent requests
+                                            [default: 0]
     -m, --max-targets <NUM>                Sets a maximum limit of targets
                                             
     -t, --req-timeout <NUM>                Sets a maximum timeout for each request (seconds)

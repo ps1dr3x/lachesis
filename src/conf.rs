@@ -23,7 +23,7 @@ pub struct Conf {
     pub user_agent: String,
     pub max_targets: u64,
     pub req_timeout: u64,
-    pub max_concurrent_requests: u64,
+    pub max_concurrent_requests: usize,
     pub debug: bool,
     pub web_ui: bool,
 }
@@ -37,7 +37,7 @@ impl Conf {
             user_agent: String::new(),
             max_targets: 0,
             req_timeout: 10,
-            max_concurrent_requests: 1000,
+            max_concurrent_requests: 0,
             debug: false,
             web_ui: false,
         }
@@ -191,7 +191,7 @@ pub fn load() -> Result<Conf, &'static str> {
     };
 
     // If a value for --max-concurrent-requests/-c is specified, check that it's a valid number
-    let max_concurrent_requests = match value_t!(matches, "max_concurrent_requests", u64) {
+    let max_concurrent_requests = match value_t!(matches, "max_concurrent_requests", usize) {
         Ok(n) => n,
         Err(_) => {
             return Err(
