@@ -4,6 +4,21 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "Cargo test",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin",
+                    "lachesis"
+                ]
+            },
+            "program": "${cargo:program}",
+            "args": []
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "Debug lachesis",
             "program": "${workspaceFolder}/target/debug/lachesis",
             "env": {

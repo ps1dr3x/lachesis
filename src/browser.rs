@@ -1,3 +1,5 @@
+/* headless_chrome is unmaintained
+
 use std::{fs::File, io::prelude::Write, path::Path, thread, time};
 
 use headless_chrome::{browser, protocol::page::ScreenshotFormat, Browser, LaunchOptionsBuilder};
@@ -49,3 +51,4 @@ pub fn maybe_take_screenshot(target: &ReqTarget, id: String) {
         }
     });
 }
+*/

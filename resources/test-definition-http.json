@@ -1,0 +1,28 @@
+[
+    {
+        "name": "Test HTTP",
+        "protocol": "http/s",
+        "options": {
+            "ports": [
+                80,
+                8080
+            ]
+        },
+        "service": {
+            "regex": "(?i)Hello lachesis(?-i)",
+            "log": true
+        },
+        "versions": {
+            "semver": {
+                "regex": "(?m)(?:Semver test )(?P<version>.*)(?: )(?-m)",
+                "ranges": [
+                    {
+                        "from": "6.5.0",
+                        "to": "6.7.0",
+                        "description": "OPS!"
+                    }
+                ]
+            }
+        }
+    }
+]

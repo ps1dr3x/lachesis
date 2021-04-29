@@ -36,6 +36,12 @@ pub fn detect(target: &ReqTarget, definitions: &[Definition]) -> Vec<DetectorRes
     let mut matching = Vec::new();
 
     for def in definitions {
+        if ((target.protocol == "http" || target.protocol == "https") && def.protocol != "http/s")
+            || (target.protocol == "tcp/custom" && def.protocol != "tcp/custom")
+        {
+            continue;
+        }
+
         let mut response = DetectorResponse::new(target.clone());
 
         let service_re = Regex::new(def.service.regex.as_str()).unwrap();

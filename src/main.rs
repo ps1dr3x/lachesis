@@ -7,13 +7,14 @@ extern crate validator_derive;
 #[macro_use]
 extern crate rocket;
 
-mod browser;
 mod conf;
 mod db;
 mod detector;
 mod lachesis;
 mod net;
 mod stats;
+#[cfg(test)]
+mod test;
 mod validators;
 mod web;
 mod worker;

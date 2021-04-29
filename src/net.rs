@@ -3,7 +3,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use bytes::Buf;
 use hyper::{
     client::{Client, HttpConnector},
     Body, Request, Uri,
@@ -92,8 +91,8 @@ pub async fn http_s(mut req: HttpsRequest) {
         .body(Body::empty())
         .unwrap();
 
-    let to = Duration::from_secs(req.timeout);
-    let cb = async {
+    let time = Duration::from_secs(req.timeout);
+    let request = async {
         let (parts, body) = match req.client.request(request).await {
             Ok(r) => r.into_parts(),
             Err(e) => {
@@ -109,21 +108,20 @@ pub async fn http_s(mut req: HttpsRequest) {
             }
         };
 
-        match hyper::body::aggregate(body).await {
-            Ok(mut b) => {
-                // Merge response's headers and body
+        match hyper::body::to_bytes(body).await {
+            Ok(b) => {
+                // Merge response's headers and body (UTF-8)
                 let mut raw_content = format!("{:?} {}\r\n", parts.version, parts.status);
-                for header in &parts.headers {
+                for (name, value) in &parts.headers {
                     raw_content = format!(
                         "{}{}: {}\r\n",
                         raw_content,
-                        header.0,
-                        header.1.to_str().unwrap_or("")
+                        name,
+                        value.to_str().unwrap_or("")
                     );
                 }
-                let mut bytes = Vec::new();
-                b.copy_to_slice(&mut bytes);
-                raw_content = format!("{}\r\n{}", raw_content, String::from_utf8_lossy(&bytes));
+                raw_content = format!("{}\r\n{}", raw_content, String::from_utf8_lossy(&b));
+
                 req.target.response = raw_content;
 
                 req.tx
@@ -144,7 +142,7 @@ pub async fn http_s(mut req: HttpsRequest) {
         };
     };
 
-    if timeout(to, cb).await.is_err() {
+    if timeout(time, request).await.is_err() {
         req.tx
             .send(WorkerMessage::Timeout(req.target.clone()))
             .await
@@ -192,6 +190,7 @@ pub async fn tcp_custom(mut req: TcpRequest) {
             }
         };
 
+        stream.writable().await.unwrap();
         if let Err(e) = stream.write_all(req.message.as_bytes()).await {
             req.tx
                 .send(WorkerMessage::Fail(
@@ -204,20 +203,32 @@ pub async fn tcp_custom(mut req: TcpRequest) {
             return;
         }
 
-        // FIXME - improve the way how the answer is read
-        let mut answer = [0; 100_000];
-        if let Err(e) = stream.read(&mut answer).await {
-            req.tx
-                .send(WorkerMessage::Fail(
-                    req.target.clone(),
-                    "TCP stream read error".to_string(),
-                    Some(e.to_string()),
-                ))
-                .await
-                .unwrap();
-            return;
+        // TODO - configurable max response size
+        let mut response = vec![0; 10240];
+        let mut response_lenght = 0;
+        loop {
+            stream.readable().await.unwrap();
+
+            match stream.read(&mut response).await {
+                Ok(n) if n == 0 => break,
+                Ok(n) => {
+                    response_lenght += n;
+                }
+                Err(e) => {
+                    req.tx
+                        .send(WorkerMessage::Fail(
+                            req.target.clone(),
+                            "TCP stream read error".to_string(),
+                            Some(e.to_string()),
+                        ))
+                        .await
+                        .unwrap();
+                    return;
+                }
+            };
         }
-        req.target.response = String::from_utf8_lossy(&answer).to_string();
+        response.truncate(response_lenght);
+        req.target.response = String::from_utf8_lossy(&response).to_string();
         req.tx
             .send(WorkerMessage::Response(req.target.clone()))
             .await

@@ -1,12 +1,21 @@
-use std::{collections::HashSet, fs::File, path::Path, sync::Arc, time::Instant};
+use std::{
+    collections::HashSet,
+    fs::File,
+    path::Path,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+    time::Instant,
+};
 
 use easy_reader::EasyReader;
 use hyper::client::{Client, HttpConnector};
 use hyper_tls::HttpsConnector;
 use serde_derive::{Deserialize, Serialize};
 use tokio::{
-    runtime::Builder,
     sync::{mpsc::Sender, Mutex, Semaphore},
+    time::{sleep, Duration},
 };
 
 use crate::{
@@ -36,43 +45,30 @@ async fn check_ports(
         }
     }
 
-    let open_ports = Arc::new(Mutex::new(unique_ports.clone()));
-    let mut handlers = Vec::new();
+    let mut open_ports = unique_ports.clone();
     for port in unique_ports {
-        let tx = tx.clone();
-        let ws = ws.clone();
-        let ip = ip.clone();
-        let open_ports = open_ports.clone();
-        let handler = tokio::spawn(async move {
-            ws.maybe_wait_for_permit().await;
+        ws.maybe_wait_for_permit().await;
 
-            let now = Instant::now();
-            let timeout = ws.probe_time.lock().await.timeout;
-            let port_target = net::test_port(ip, port, timeout as u64).await;
+        let now = Instant::now();
+        let timeout = ws.probe_time.lock().await.timeout;
+        let port_target = net::test_port(ip.clone(), port, timeout as u64).await;
 
-            if port_target.status != PortStatus::Open {
-                open_ports.lock().await.remove(&port);
-            }
+        if port_target.status != PortStatus::Open {
+            open_ports.remove(&port);
+        }
 
-            tx.send(WorkerMessage::PortTarget(port_target))
-                .await
-                .unwrap();
+        tx.send(WorkerMessage::PortTarget(port_target))
+            .await
+            .unwrap();
 
-            let rtt = now.elapsed().as_millis() as f32;
-            let mut pt = ws.probe_time.lock().await;
-            pt.timeout = estimate_timeout(pt.srtt, rtt, pt.rttvar);
+        let rtt = now.elapsed().as_millis() as f32;
+        let mut pt = ws.probe_time.lock().await;
+        pt.timeout = estimate_timeout(pt.srtt, rtt, pt.rttvar);
 
-            ws.maybe_release_permit().await;
-        });
-
-        handlers.push(handler);
+        ws.maybe_release_permit().await;
     }
 
-    for handler in handlers {
-        handler.await.unwrap();
-    }
-
-    Arc::try_unwrap(open_ports).unwrap().into_inner()
+    open_ports
 }
 
 #[derive(Debug, Clone)]
@@ -107,88 +103,85 @@ impl ReqTarget {
 }
 
 async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: ReqTarget) {
-    tokio::spawn(async move {
-        let open_ports = check_ports(
-            tx.clone(),
-            ws.clone(),
-            &ws.conf.definitions,
-            target.ip.clone(),
-        )
-        .await;
+    let open_ports = check_ports(
+        tx.clone(),
+        ws.clone(),
+        &ws.conf.definitions,
+        target.ip.clone(),
+    )
+    .await;
 
-        let mut http_s_ports = HashSet::new();
-        for def in &ws.conf.definitions {
-            match def.protocol.as_str() {
-                "http/s" => {
-                    // Only one http/s request per port
-                    for port in &def.options.ports {
-                        if open_ports.contains(port) {
-                            http_s_ports.insert(*port);
-                        }
+    let mut http_s_ports = HashSet::new();
+    for def in &ws.conf.definitions {
+        match def.protocol.as_str() {
+            "http/s" => {
+                // Only one http/s request per port
+                for port in &def.options.ports {
+                    if open_ports.contains(port) {
+                        http_s_ports.insert(*port);
                     }
                 }
-                "tcp/custom" => {
-                    for port in &def.options.ports {
-                        if !open_ports.contains(port) {
-                            continue;
-                        }
-
-                        ws.maybe_wait_for_permit().await;
-
-                        let mut target = target.clone();
-                        target.domain = String::new();
-                        target.protocol = "tcp/custom".to_string();
-                        target.port = *port;
-                        target.time = Instant::now();
-
-                        let req = TcpRequest {
-                            tx: tx.clone(),
-                            target: target.clone(),
-                            message: def.options.message.clone().unwrap(),
-                            timeout: ws.conf.req_timeout,
-                        };
-                        net::tcp_custom(req).await;
-
-                        ws.maybe_release_permit().await;
-                    }
-                }
-                // Protocol field is already validated when conf is loaded
-                _ => (),
             }
-        }
-
-        if !http_s_ports.is_empty() {
-            for protocol in ["https", "http"].iter() {
-                for port in &http_s_ports {
-                    if (*port == 80 && *protocol == "https")
-                        || (*port == 443 && *protocol == "http")
-                    {
+            "tcp/custom" => {
+                for port in &def.options.ports {
+                    if !open_ports.contains(port) {
                         continue;
                     }
 
                     ws.maybe_wait_for_permit().await;
 
                     let mut target = target.clone();
-                    target.protocol = protocol.to_string();
+                    target.domain = String::new();
+                    target.protocol = "tcp/custom".to_string();
                     target.port = *port;
                     target.time = Instant::now();
 
-                    let req = HttpsRequest {
+                    let req = TcpRequest {
                         tx: tx.clone(),
-                        client: ws.https_client.clone(),
                         target: target.clone(),
-                        user_agent: ws.conf.user_agent.clone(),
+                        message: def.options.message.clone().unwrap(),
                         timeout: ws.conf.req_timeout,
                     };
-                    net::http_s(req).await;
+                    net::tcp_custom(req).await;
 
                     ws.maybe_release_permit().await;
                 }
             }
+            // Protocol field is already validated when conf is loaded
+            _ => (),
         }
+    }
 
-        tx.send(WorkerMessage::NextTarget).await.unwrap();
-    });
+    if !http_s_ports.is_empty() {
+        for protocol in ["https", "http"].iter() {
+            for port in &http_s_ports {
+                if (*port == 80 && *protocol == "https") || (*port == 443 && *protocol == "http") {
+                    continue;
+                }
+
+                ws.maybe_wait_for_permit().await;
+
+                let mut target = target.clone();
+                target.protocol = protocol.to_string();
+                target.port = *port;
+                target.time = Instant::now();
+
+                let req = HttpsRequest {
+                    tx: tx.clone(),
+                    client: ws.https_client.clone(),
+                    target: target.clone(),
+                    user_agent: ws.conf.user_agent.clone(),
+                    timeout: ws.conf.req_timeout,
+                };
+                net::http_s(req).await;
+
+                ws.maybe_release_permit().await;
+            }
+        }
+    }
+
+    ws.targets_completed.fetch_add(1, Ordering::SeqCst);
+    tx.send(WorkerMessage::NextTarget).await.unwrap();
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -248,8 +241,8 @@ struct WorkerState {
     conf: Conf,
     https_client: Client<HttpsConnector<HttpConnector>>,
     targets_count: u64,
+    targets_completed: Arc<AtomicU64>,
     semaphore: Arc<Semaphore>,
-    requests: Arc<Mutex<WorkerRequests>>,
     probe_time: Arc<Mutex<WorkerProbeTime>>,
 }
 
@@ -261,11 +254,8 @@ impl WorkerState {
             conf,
             https_client,
             targets_count: 0,
+            targets_completed: Arc::new(AtomicU64::new(0)),
             semaphore: Arc::new(Semaphore::new(max_concurrent_requests)),
-            requests: Arc::new(Mutex::new(WorkerRequests {
-                spawned: 0,
-                completed: 0,
-            })),
             probe_time: Arc::new(Mutex::new(WorkerProbeTime {
                 srtt: 0.0,
                 rttvar: 0.0,
@@ -278,16 +268,12 @@ impl WorkerState {
         if self.conf.max_concurrent_requests != 0 {
             self.semaphore.acquire().await.unwrap().forget();
         }
-
-        self.requests.lock().await.spawned += 1;
     }
 
     async fn maybe_release_permit(&self) {
         if self.conf.max_concurrent_requests != 0 {
             self.semaphore.add_permits(1);
         }
-
-        self.requests.lock().await.completed += 1;
     }
 }
 
@@ -316,55 +302,43 @@ pub enum WorkerMessage {
     Shutdown,
 }
 
-pub fn run(tx: Sender<WorkerMessage>, conf: Conf) {
-    let rt = Builder::new_multi_thread()
-        .worker_threads(num_cpus::get())
-        .enable_all()
-        .build()
-        .unwrap();
+pub async fn run(tx: Sender<WorkerMessage>, conf: Conf) {
+    let mut ws = WorkerState::new(conf, net::build_https_client());
 
-    rt.block_on(async {
-        let mut ws = WorkerState::new(conf, net::build_https_client());
+    if !ws.conf.dataset.is_empty() {
+        let mut dataset =
+            EasyReader::new(File::open(Path::new(&ws.conf.dataset)).unwrap()).unwrap();
 
-        if !ws.conf.dataset.is_empty() {
-            let mut dataset =
-                EasyReader::new(File::open(Path::new(&ws.conf.dataset)).unwrap()).unwrap();
-
-            while ws.conf.max_targets == 0 || ws.targets_count < ws.conf.max_targets {
-                let target = if let Some(target) = get_next_dataset_target(&mut dataset).await {
-                    target
-                } else {
-                    // All the targets have been consumed
-                    break;
-                };
-
-                target_requests(tx.clone(), ws.clone(), target).await;
-
-                ws.targets_count += 1;
-            }
-        } else {
-            while ws.conf.max_targets == 0 || ws.targets_count < ws.conf.max_targets {
-                let target = if let Some(target) = get_next_subnet_target(&ws.conf).await {
-                    target
-                } else {
-                    // All the targets have been consumed
-                    break;
-                };
-
-                target_requests(tx.clone(), ws.clone(), target).await;
-
-                ws.targets_count += 1;
-            }
-        };
-
-        // Wait for existing connections to complete
-        loop {
-            let reqs = ws.requests.lock().await;
-            if reqs.completed == reqs.spawned {
+        while ws.conf.max_targets == 0 || ws.targets_count < ws.conf.max_targets {
+            let target = if let Some(target) = get_next_dataset_target(&mut dataset).await {
+                target
+            } else {
+                // All the targets have been consumed
                 break;
-            }
-        }
+            };
 
-        tx.send(WorkerMessage::Shutdown).await.unwrap();
-    });
+            tokio::spawn(target_requests(tx.clone(), ws.clone(), target));
+
+            ws.targets_count += 1;
+        }
+    } else {
+        while ws.conf.max_targets == 0 || ws.targets_count < ws.conf.max_targets {
+            let target = if let Some(target) = get_next_subnet_target(&ws.conf).await {
+                target
+            } else {
+                // All the targets have been consumed
+                break;
+            };
+
+            tokio::spawn(target_requests(tx.clone(), ws.clone(), target));
+
+            ws.targets_count += 1;
+        }
+    };
+
+    while ws.targets_completed.load(Ordering::SeqCst) < ws.targets_count {
+        sleep(Duration::from_millis(500)).await;
+    }
+
+    tx.send(WorkerMessage::Shutdown).await.unwrap();
 }

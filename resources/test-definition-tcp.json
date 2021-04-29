@@ -1,0 +1,24 @@
+[
+    {
+        "name": "Test TCP",
+        "protocol": "tcp/custom",
+        "options": {
+            "ports": [80, 8081],
+            "timeout": true,
+            "message": "Ciao!\r\n"
+        },
+        "service": {
+            "regex": "(?i)lachesis(?-i)",
+            "log": true
+        },
+        "versions": {
+            "regex": [
+                {
+                    "regex": "6.6.6",
+                    "version": "Evil version",
+                    "description": "OPS!"
+                }
+            ]
+        }
+    }
+]

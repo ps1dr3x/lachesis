@@ -16,6 +16,7 @@ use crate::validators::{
 
 #[derive(Clone, Debug, Validate)]
 pub struct Conf {
+    pub db_path: String,
     #[validate]
     pub definitions: Vec<Definition>,
     pub dataset: String,
@@ -31,6 +32,7 @@ pub struct Conf {
 impl Conf {
     pub fn default() -> Conf {
         Conf {
+            db_path: "data/db/services".to_string(),
             definitions: Vec::new(),
             dataset: String::new(),
             subnets: Arc::new(Mutex::new((Vec::new(), 0))),
@@ -104,7 +106,7 @@ pub struct RegexVersion {
     pub description: String,
 }
 
-fn parse_validate_definitions(paths: &[String]) -> Result<Vec<Definition>, String> {
+pub fn parse_validate_definitions(paths: &[String]) -> Result<Vec<Definition>, String> {
     let mut definitions = Vec::new();
 
     for path in paths {
@@ -292,5 +294,6 @@ pub fn load() -> Result<Conf, &'static str> {
         max_concurrent_requests,
         debug: matches.is_present("debug"),
         web_ui: false,
+        ..Conf::default()
     })
 }

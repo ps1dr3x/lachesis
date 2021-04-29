@@ -1,7 +1,9 @@
-use crate::detector::DetectorResponse;
+use std::path::Path;
+
 use rusqlite::{types::ToSql, Connection, Error};
 use serde_derive::{Deserialize, Serialize};
-use std::path::Path;
+
+use crate::detector::DetectorResponse;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct ServicesRow {
@@ -19,7 +21,7 @@ struct ServicesRow {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PaginatedServices {
     services: Vec<ServicesRow>,
-    rows_count: u32,
+    pub rows_count: u32,
 }
 
 pub struct DbMan {
@@ -27,8 +29,9 @@ pub struct DbMan {
 }
 
 impl DbMan {
-    pub fn init() -> Result<Self, Error> {
-        let conn = Connection::open(Path::new("data/db/services"))?;
+    pub fn init(path: Option<String>) -> Result<Self, Error> {
+        let path = path.unwrap_or_else(|| "data/db/services".to_string());
+        let conn = Connection::open(Path::new(&path))?;
 
         conn.execute(
             "

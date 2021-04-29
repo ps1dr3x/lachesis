@@ -36,7 +36,7 @@ fn services(
     tx: State<Arc<Mutex<Sender<UIMessage>>>>,
     params: Form<Pagination>,
 ) -> Result<Json<PaginatedServices>, Status> {
-    let db = match DbMan::init() {
+    let db = match DbMan::init(None) {
         Ok(db) => db,
         Err(err) => {
             let msg = UIMessage {
@@ -68,7 +68,7 @@ fn del_services(
     tx: State<Arc<Mutex<Sender<UIMessage>>>>,
     ids: Json<Vec<u32>>,
 ) -> Result<&str, Status> {
-    let db = match DbMan::init() {
+    let db = match DbMan::init(None) {
         Ok(db) => db,
         Err(err) => {
             let msg = UIMessage {

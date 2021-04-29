@@ -1,7 +1,7 @@
+use std::{thread, time::Instant};
+
 use colored::Colorize;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-
-use std::{thread, time::Instant};
 
 use crate::{
     detector::DetectorResponse,

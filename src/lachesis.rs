@@ -1,10 +1,12 @@
 use std::{fmt::Debug, process::Termination, sync::mpsc as sync_mpsc, thread};
 
 use colored::Colorize;
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::{
+    runtime::Builder,
+    sync::mpsc::{self, Receiver, Sender},
+};
 
 use crate::{
-    browser,
     conf::{self, Conf},
     db::DbMan,
     detector,
@@ -47,7 +49,7 @@ fn handle_worker_response(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target: R
 
             stats.log_match(&res);
 
-            let id = match dbm.save_service(&res) {
+            let _id = match dbm.save_service(&res) {
                 Ok(id) => id.to_string(),
                 Err(err) => {
                     stats.log_int_err(format!(
@@ -58,17 +60,18 @@ fn handle_worker_response(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target: R
                 }
             };
 
-            browser::maybe_take_screenshot(&target, id);
+            // headless_chrome is unmaintained
+            // browser::maybe_take_screenshot(&target, id);
         }
     }
 
     stats.increment_successful(&target.protocol, matching);
 }
 
-async fn run_worker(conf: &Conf) -> ExitCode {
+pub async fn run_worker(conf: &Conf) -> ExitCode {
     let mut stats = Stats::new(conf.max_targets);
 
-    let dbm = match DbMan::init() {
+    let dbm = match DbMan::init(Some(conf.db_path.clone())) {
         Ok(dbm) => dbm,
         Err(err) => {
             stats.log_int_err(format!("Db initialization error: {}", err));
@@ -78,8 +81,7 @@ async fn run_worker(conf: &Conf) -> ExitCode {
 
     let (tx, mut rx): (Sender<WorkerMessage>, Receiver<WorkerMessage>) = mpsc::channel(100000);
 
-    let in_conf = conf.clone();
-    let thread = thread::spawn(move || worker::run(tx, in_conf));
+    let jhandle = tokio::spawn(worker::run(tx, conf.clone()));
 
     loop {
         let msg = match rx.recv().await {
@@ -120,8 +122,8 @@ async fn run_worker(conf: &Conf) -> ExitCode {
         };
     }
 
-    if let Err(e) = thread.join() {
-        stats.log_int_err(format!("The thread being joined has panicked: {:?}", e));
+    if let Err(e) = jhandle.await {
+        stats.log_int_err(format!("The task being joined has panicked: {:?}", e));
     };
 
     stats.finish();
@@ -143,8 +145,7 @@ fn run_ui() -> ExitCode {
     }
 }
 
-#[tokio::main]
-pub async fn run() -> ExitCode {
+pub fn run() -> ExitCode {
     let conf = match conf::load() {
         Ok(conf) => conf,
         Err(err) => {
@@ -156,6 +157,7 @@ pub async fn run() -> ExitCode {
     if conf.web_ui {
         run_ui()
     } else {
-        run_worker(&conf).await
+        let rt = Builder::new_multi_thread().enable_all().build().unwrap();
+        rt.block_on(run_worker(&conf))
     }
 }
