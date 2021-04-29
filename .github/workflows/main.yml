@@ -33,6 +33,9 @@ jobs:
       - name: (Rust) Build
         run: cargo build --release --verbose
 
+      - name: (Rust) Test
+        run: cargo test
+
       - name: (Frontend) Install
         run: npm ci
 
