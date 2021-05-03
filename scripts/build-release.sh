@@ -24,13 +24,12 @@ cd ../..
 
 # Compile Lachesis
 cargo build --release
-cp target/release/lachesis dist/lachesis-$VERSION
 
 # Copy bin file and resources into the dist dir
+cp target/release/lachesis dist/lachesis-$VERSION
 cp -R resources dist/lachesis-$VERSION
 
 # Copy the data directory
 cp -r data/ dist/lachesis-$VERSION/data
 
-# Notify success
 printf "\nBuild succeeded: dist/lachesis-$VERSION\n\n"
