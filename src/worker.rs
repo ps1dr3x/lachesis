@@ -305,36 +305,30 @@ pub enum WorkerMessage {
 pub async fn run(tx: Sender<WorkerMessage>, conf: Conf) {
     let mut ws = WorkerState::new(conf, net::build_https_client());
 
-    if !ws.conf.dataset.is_empty() {
-        let mut dataset =
-            EasyReader::new(File::open(Path::new(&ws.conf.dataset)).unwrap()).unwrap();
-
-        while ws.conf.max_targets == 0 || ws.targets_count < ws.conf.max_targets {
-            let target = if let Some(target) = get_next_dataset_target(&mut dataset).await {
-                target
-            } else {
-                // All the targets have been consumed
-                break;
-            };
-
-            tokio::spawn(target_requests(tx.clone(), ws.clone(), target));
-
-            ws.targets_count += 1;
-        }
+    let mut dataset = if !ws.conf.dataset.is_empty() {
+        EasyReader::new(File::open(Path::new(&ws.conf.dataset)).unwrap()).unwrap()
     } else {
-        while ws.conf.max_targets == 0 || ws.targets_count < ws.conf.max_targets {
-            let target = if let Some(target) = get_next_subnet_target(&ws.conf).await {
-                target
-            } else {
-                // All the targets have been consumed
-                break;
-            };
-
-            tokio::spawn(target_requests(tx.clone(), ws.clone(), target));
-
-            ws.targets_count += 1;
-        }
+        // When in subnet mode, open a test file just as a workaround to avoid writing two different
+        // loops for the two modes (dataset/subnet) or reopening the dataset file at every iteration
+        EasyReader::new(File::open("./resources/test-dataset.json").unwrap()).unwrap()
     };
+
+    while ws.conf.max_targets == 0 || ws.targets_count < ws.conf.max_targets {
+        let target = if !ws.conf.dataset.is_empty() {
+            get_next_dataset_target(&mut dataset).await
+        } else {
+            get_next_subnet_target(&ws.conf).await
+        };
+
+        let target = match target {
+            Some(target) => target,
+            None => break, // All the targets have been consumed
+        };
+
+        tokio::spawn(target_requests(tx.clone(), ws.clone(), target));
+
+        ws.targets_count += 1;
+    }
 
     while ws.targets_completed.load(Ordering::SeqCst) < ws.targets_count {
         sleep(Duration::from_millis(500)).await;
