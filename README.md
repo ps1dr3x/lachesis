@@ -2,7 +2,7 @@
 
 [Lachesis](https://en.wikipedia.org/wiki/Lachesis) is a work in progress web services mass scanner written in Rust.
 
-This project was born as a simple test of the Rust's networking (and asynchronous I/O) performance, but later expanded with the intention to create a sort of "little personal Shodan", an open scanner that collects statistical data on web services and exposes the magnitude of outdated, vulnerable, misconfigured services publicly accessible around the web.
+This project was born as a test of the Rust's networking (and asynchronous I/O) performance, but later expanded with the intention of creating a sort of "little personal Shodan", an open scanner that collects statistical data on web services and exposes the outdated, vulnerable or misconfigured services publicly accessible around the web.
 
 ```
 -------------8<-------------
@@ -66,18 +66,18 @@ OPTIONS:
 
 ## Roadmap / TODOs
 
-- Optimise https, http and tcp requests to minimize unnecessary overheads
-- Add much more definitions
-- Plugin system to expand the scanner's capabilities to other configurations, request types and scanning methods
-- Do some information gathering on the host after each finding
-- Improve the API and the Web UI (a geo map would be nice)
-- Distributed DB/agent mode
+- Optimise https, http and tcp requests, async/concurrency management and minimize overheads (e.g. SYN scan for ports, rustls instead of openssl)
+- Add definitions and scan options (e.g. request methods, payloads, paths)
+- Plugin system/API to expand or integrate the scanner's capabilities
+- Additional information gathering on the known hosts (e.g. further scan after specific findings, periodic checks)
+- Improve the web API and the Web UI (a geo map showing the findings would be nice)
+- Distributed DB support and agent mode
 
 ## Build from source
 
 ### Dependencies
 
-- [Rust](https://rustup.rs/): Usually nightly is needed
+- [Rust](https://rustup.rs/): Nightly channel is currently needed, as some unstable features are used
 - [Node.js, Npm](https://nodejs.org): Needed for the Web UI (front end) part
 - On Linux and BSD based OS:
   - pkg-config (pkg-config on deb, pkg-config/pkgconfig/pkgconf-pkg-config on rpm)
@@ -110,9 +110,9 @@ cargo run -- --help
 
 #### "Too many open files" error
 
-Some Linux distributions are configured with a very low limit on the number of maximum opened files. Depending on the number of concurrent requests and other factors, that limit might be reached, crashing the software.
+Some Linux distributions are pre-configured with a low limit on the number of maximum opened files. Depending on the number of concurrent requests and other factors, that limit might be reached, crashing the software.
 
-The limits can usually be increased in the following files. This is only an example, depending on the machine configuration and overall load they can be set higher or lower, only for an user or only for root.
+The limits can usually be increased in the following files. This is only an example, depending on the machine configuration and overall load they can be set higher or lower, only for a user or only for root.
 
 - PAM (/etc/security/limits.conf)
   ```
@@ -125,7 +125,7 @@ The limits can usually be increased in the following files. This is only an exam
   DefaultLimitNOFILE=99999
   ```
 
-Note: To make the modification effective, a reboot is needed. The current limits can be checked using the commands:
+Note: to make sure the modification is effective, a reboot is recommended. The current limits can be checked using the commands:
 
 ```bash
 ulimit -Hn #hard
