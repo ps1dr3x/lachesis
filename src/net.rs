@@ -21,7 +21,6 @@ use super::worker::{PortStatus, PortTarget, ReqTarget, WorkerMessage};
 pub async fn test_port(ip: String, port: u16, timeout_millis: u64) -> PortTarget {
     let addr = format!("{}:{}", ip, port).parse::<SocketAddr>().unwrap();
     let mut port_target = PortTarget {
-        ip,
         port,
         status: PortStatus::Closed,
         time: Instant::now(),

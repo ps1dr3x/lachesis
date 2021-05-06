@@ -5,7 +5,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use crate::{
     detector::DetectorResponse,
-    worker::{PortStatus, ReqTarget},
+    worker::{PortStatus, PortsTarget, ReqTarget},
 };
 
 pub fn format_host(target: &ReqTarget) -> String {
@@ -16,16 +16,16 @@ pub fn format_host(target: &ReqTarget) -> String {
     }
 }
 
-struct PortTarget {
+struct PortStats {
     open: u64,
     closed: u64,
     avg_time: u128,
     timedout: u64,
 }
 
-impl PortTarget {
+impl PortStats {
     fn default() -> Self {
-        PortTarget {
+        PortStats {
             open: 0,
             closed: 0,
             avg_time: 0,
@@ -38,16 +38,16 @@ impl PortTarget {
     }
 }
 
-struct RequestStatus {
+struct RequestStats {
     successful: u64,
     avg_time: u128,
     failed: u64,
     timedout: u64,
 }
 
-impl RequestStatus {
+impl RequestStats {
     fn default() -> Self {
-        RequestStatus {
+        RequestStats {
             successful: 0,
             avg_time: 0,
             failed: 0,
@@ -66,10 +66,10 @@ pub struct Stats {
     max_targets: u64,
     targets: u64,
     avg_reqs_per_sec: u64,
-    ports: PortTarget,
-    https: RequestStatus,
-    http: RequestStatus,
-    tcp_custom: RequestStatus,
+    ports: PortStats,
+    https: RequestStats,
+    http: RequestStats,
+    tcp_custom: RequestStats,
     matching: u64,
 }
 
@@ -118,10 +118,10 @@ impl Stats {
             max_targets,
             targets: 0,
             avg_reqs_per_sec: 0,
-            ports: PortTarget::default(),
-            https: RequestStatus::default(),
-            http: RequestStatus::default(),
-            tcp_custom: RequestStatus::default(),
+            ports: PortStats::default(),
+            https: RequestStats::default(),
+            http: RequestStats::default(),
+            tcp_custom: RequestStats::default(),
             matching: 0,
         }
     }
@@ -137,15 +137,19 @@ impl Stats {
         }
     }
 
-    pub fn update_ports_stats(&mut self, port_status: PortStatus, time: Instant) {
-        match port_status {
-            PortStatus::Open => {
-                self.update_req_avg_time(time, "port");
-                self.increment_successful("port", false);
-            }
-            PortStatus::Closed => self.increment_failed("port"),
-            PortStatus::Timedout => self.increment_timedout("port"),
-        };
+    pub fn update_ports_stats(&mut self, ports_target: PortsTarget) {
+        for port in &ports_target.ports {
+            match port.status {
+                PortStatus::Open => {
+                    self.update_req_avg_time(port.time, "port");
+                    self.increment_successful("port", false);
+                }
+                PortStatus::Closed => self.increment_failed("port"),
+                PortStatus::Timedout => self.increment_timedout("port"),
+            };
+        }
+
+        self.log_open_ports(ports_target);
     }
 
     pub fn increment_successful(&mut self, protocol: &str, matching: bool) {
@@ -228,7 +232,7 @@ impl Stats {
     }
 
     fn update_message(&self) {
-        self.progress_bars[1].set_message(&format!(
+        self.progress_bars[1].set_message(format!(
             "Targets: {} Requests: {} Req/sec: {} Matching: {}",
             self.targets.to_string().cyan(),
             self.total_requests().to_string().cyan(),
@@ -236,7 +240,7 @@ impl Stats {
             self.matching.to_string().green(),
         ));
 
-        self.progress_bars[2].set_message(&format!(
+        self.progress_bars[2].set_message(format!(
             "Ports [tested: {} open: {} closed: {} timedout: {} avg_time: {}ms]",
             self.ports.total().to_string().cyan(),
             self.ports.open.to_string().green(),
@@ -245,7 +249,7 @@ impl Stats {
             self.ports.avg_time.to_string().cyan(),
         ));
 
-        self.progress_bars[3].set_message(&format!(
+        self.progress_bars[3].set_message(format!(
             "Tcp/custom [total: {} successful: {} failed: {} timedout: {} avg_time: {}ms]",
             self.tcp_custom.total().to_string().cyan(),
             self.tcp_custom.successful.to_string().green(),
@@ -254,7 +258,7 @@ impl Stats {
             self.tcp_custom.avg_time.to_string().cyan(),
         ));
 
-        self.progress_bars[4].set_message(&format!(
+        self.progress_bars[4].set_message(format!(
             "Http [total: {} successful: {} failed: {} timedout: {} avg_time: {}ms]",
             self.http.total().to_string().cyan(),
             self.http.successful.to_string().green(),
@@ -263,7 +267,7 @@ impl Stats {
             self.http.avg_time.to_string().cyan(),
         ));
 
-        self.progress_bars[5].set_message(&format!(
+        self.progress_bars[5].set_message(format!(
             "Https [total: {} successful: {} failed: {} timedout: {} avg_time: {}ms]",
             self.https.total().to_string().cyan(),
             self.https.successful.to_string().green(),
@@ -275,6 +279,24 @@ impl Stats {
 
     pub fn log_int_err(&mut self, message: String) {
         self.progress_bars[0].println(format!("[{}] {}", "ERROR".red(), message));
+    }
+
+    fn log_open_ports(&mut self, ports_target: PortsTarget) {
+        let mut open_ports = Vec::new();
+        for ps in ports_target.ports {
+            if ps.status == PortStatus::Open {
+                open_ports.push(ps.port);
+            }
+        }
+
+        if !open_ports.is_empty() {
+            self.progress_bars[0].println(format!(
+                "[{}][{}] Open ports: {}",
+                "OPEN_PORTS".blue(),
+                ports_target.ip.cyan(),
+                format!("{:?}", open_ports).cyan()
+            ));
+        }
     }
 
     pub fn log_response(&mut self, target: &ReqTarget) {

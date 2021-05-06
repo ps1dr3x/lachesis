@@ -79,7 +79,7 @@ pub async fn run_worker(conf: &Conf) -> ExitCode {
         }
     };
 
-    let (tx, mut rx): (Sender<WorkerMessage>, Receiver<WorkerMessage>) = mpsc::channel(100000);
+    let (tx, mut rx): (Sender<WorkerMessage>, Receiver<WorkerMessage>) = mpsc::channel(100_000);
 
     let jhandle = tokio::spawn(worker::run(tx, conf.clone()));
 
@@ -92,8 +92,8 @@ pub async fn run_worker(conf: &Conf) -> ExitCode {
         stats.update_avg_reqs_per_sec();
 
         match msg {
-            WorkerMessage::PortTarget(port_target) => {
-                stats.update_ports_stats(port_target.status, port_target.time);
+            WorkerMessage::PortsTarget(ports_target) => {
+                stats.update_ports_stats(ports_target);
                 continue;
             }
             WorkerMessage::Fail(target, error_context, error) => {

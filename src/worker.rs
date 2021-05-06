@@ -46,6 +46,10 @@ async fn check_ports(
     }
 
     let mut open_ports = unique_ports.clone();
+    let mut ports_target = PortsTarget {
+        ip: ip.clone(),
+        ports: Vec::new(),
+    };
     for port in unique_ports {
         ws.maybe_wait_for_permit().await;
 
@@ -57,9 +61,7 @@ async fn check_ports(
             open_ports.remove(&port);
         }
 
-        tx.send(WorkerMessage::PortTarget(port_target))
-            .await
-            .unwrap();
+        ports_target.ports.push(port_target);
 
         let rtt = now.elapsed().as_millis() as f32;
         let mut pt = ws.probe_time.lock().await;
@@ -67,6 +69,10 @@ async fn check_ports(
 
         ws.maybe_release_permit().await;
     }
+
+    tx.send(WorkerMessage::PortsTarget(ports_target))
+        .await
+        .unwrap();
 
     open_ports
 }
@@ -286,15 +292,20 @@ pub enum PortStatus {
 
 #[derive(Debug, Clone)]
 pub struct PortTarget {
-    pub ip: String,
     pub port: u16,
     pub status: PortStatus,
     pub time: Instant,
 }
 
 #[derive(Debug, Clone)]
+pub struct PortsTarget {
+    pub ip: String,
+    pub ports: Vec<PortTarget>,
+}
+
+#[derive(Debug, Clone)]
 pub enum WorkerMessage {
-    PortTarget(PortTarget),
+    PortsTarget(PortsTarget),
     Response(ReqTarget),
     Fail(ReqTarget, String, Option<String>),
     Timeout(ReqTarget),
@@ -308,8 +319,8 @@ pub async fn run(tx: Sender<WorkerMessage>, conf: Conf) {
     let mut dataset = if !ws.conf.dataset.is_empty() {
         EasyReader::new(File::open(Path::new(&ws.conf.dataset)).unwrap()).unwrap()
     } else {
-        // When in subnet mode, open a test file just as a workaround to avoid writing two different
-        // loops for the two modes (dataset/subnet) or reopening the dataset file at every iteration
+        // When in subnet mode, open a test file here just as a workaround to avoid writing two
+        // different loops for the two modes or reopening the dataset file at every iteration
         EasyReader::new(File::open("./resources/test-dataset.json").unwrap()).unwrap()
     };
 
