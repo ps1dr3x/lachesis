@@ -226,12 +226,15 @@ pub async fn tcp_custom(mut req: TcpRequest) {
                 }
             };
         }
-        response.truncate(response_lenght);
-        req.target.response = String::from_utf8_lossy(&response).to_string();
-        req.tx
-            .send(WorkerMessage::Response(req.target.clone()))
-            .await
-            .unwrap();
+
+        if response_lenght > 0 {
+            response.truncate(response_lenght);
+            req.target.response = String::from_utf8_lossy(&response).to_string();
+            req.tx
+                .send(WorkerMessage::Response(req.target.clone()))
+                .await
+                .unwrap();
+        }
     };
 
     if timeout(to, cb).await.is_err() {
