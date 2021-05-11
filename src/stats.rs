@@ -315,7 +315,7 @@ impl Stats {
             "[{}][{}][{}:{}] - Request timeout",
             "TIMEOUT".yellow(),
             target.protocol.to_uppercase().blue(),
-            target.domain.cyan(),
+            format_host(&target).cyan(),
             target.port.to_string().cyan(),
         ));
     }
@@ -325,7 +325,7 @@ impl Stats {
             "[{}][{}][{}:{}] - {}{}",
             "FAIL".magenta(),
             target.protocol.to_uppercase().blue(),
-            target.domain.cyan(),
+            format_host(&target).cyan(),
             target.port.to_string().cyan(),
             error_context,
             if let Some(e) = error {
