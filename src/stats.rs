@@ -137,7 +137,7 @@ impl Stats {
         }
     }
 
-    pub fn update_ports_stats(&mut self, ports_target: PortsTarget) {
+    pub fn update_ports_stats(&mut self, ports_target: &PortsTarget) {
         for port in &ports_target.ports {
             match port.status {
                 PortStatus::Open => {
@@ -148,8 +148,6 @@ impl Stats {
                 PortStatus::Timedout => self.increment_timedout("port"),
             };
         }
-
-        self.log_open_ports(ports_target);
     }
 
     pub fn increment_successful(&mut self, protocol: &str, matching: bool) {
@@ -281,22 +279,13 @@ impl Stats {
         self.progress_bars[0].println(format!("[{}] {}", "ERROR".red(), message));
     }
 
-    fn log_open_ports(&mut self, ports_target: PortsTarget) {
-        let mut open_ports = Vec::new();
-        for ps in ports_target.ports {
-            if ps.status == PortStatus::Open {
-                open_ports.push(ps.port);
-            }
-        }
-
-        if !open_ports.is_empty() {
-            self.progress_bars[0].println(format!(
-                "[{}][{}] Open ports: {}",
-                "OPEN_PORTS".blue(),
-                ports_target.ip.cyan(),
-                format!("{:?}", open_ports).cyan()
-            ));
-        }
+    pub fn log_open_ports(&mut self, ip: &String, ports: &Vec<u16>) {
+        self.progress_bars[0].println(format!(
+            "[{}][{}] Open ports: {}",
+            "OPEN_PORTS".blue(),
+            ip.cyan(),
+            format!("{:?}", ports).cyan()
+        ));
     }
 
     pub fn log_response(&mut self, target: &ReqTarget) {

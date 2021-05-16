@@ -303,6 +303,18 @@ pub struct PortsTarget {
     pub ports: Vec<PortTarget>,
 }
 
+impl PortsTarget {
+    pub fn open_ports(&self) -> Vec<u16> {
+        let mut open_ports = Vec::new();
+        for port in &self.ports {
+            if port.status == PortStatus::Open {
+                open_ports.push(port.port);
+            }
+        }
+        open_ports
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum WorkerMessage {
     PortsTarget(PortsTarget),

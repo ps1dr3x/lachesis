@@ -172,7 +172,30 @@ impl DbMan {
         Ok(DbMan { client })
     }
 
-    async fn update_or_insert_ip_ports(&self, ip: &str, ports: Vec<i32>) -> Result<i64, Error> {
+    pub async fn update_or_insert_ip(&self, ip: &str) -> Result<i64, Error> {
+        let stmt = self
+            .client
+            .prepare(
+                "
+                INSERT INTO ips_ports (ip)
+                VALUES ($1)
+                ON CONFLICT (ip) DO UPDATE
+                -- Workaround: do nothing but trigger the update triggers
+                SET ip = excluded.ip
+                RETURNING id
+            ",
+            )
+            .await?;
+        let res = self.client.query_one(&stmt, &[&ip]).await?;
+
+        Ok(res.get(0))
+    }
+
+    pub async fn update_or_insert_ip_ports(&self, ip: &str, ports: Vec<u16>) -> Result<i64, Error> {
+        let ports: Vec<i32> = ports.iter().map(|port| {
+            *port as i32
+        }).collect();
+
         let stmt = self
             .client
             .prepare(
@@ -190,7 +213,7 @@ impl DbMan {
         Ok(res.get(0))
     }
 
-    async fn update_or_insert_domain(&self, domain: &str) -> Result<i64, Error> {
+    pub async fn update_or_insert_domain(&self, domain: &str) -> Result<i64, Error> {
         let stmt = self
             .client
             .prepare(
@@ -211,12 +234,8 @@ impl DbMan {
 
     pub async fn save_service(&self, service: &DetectorResponse) -> Result<u64, Error> {
         let ip_id = self
-            .update_or_insert_ip_ports(&service.target.ip, [service.target.port as i32].to_vec())
-            .await?; // WIP
-
-        if !service.target.domain.is_empty() {
-            self.update_or_insert_domain(&service.target.domain).await?;
-        }
+            .update_or_insert_ip(&service.target.ip)
+            .await?;
 
         let stmt = self
             .client

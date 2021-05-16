@@ -6,14 +6,7 @@ use tokio::{
     sync::mpsc::{self, Receiver, Sender},
 };
 
-use crate::{
-    conf::{self, Conf},
-    db::DbMan,
-    detector,
-    stats::Stats,
-    web::{self, UIMessage},
-    worker::{self, ReqTarget, WorkerMessage},
-};
+use crate::{conf::{self, Conf}, db::DbMan, detector, stats::Stats, web::{self, UIMessage}, worker::{self, PortsTarget, ReqTarget, WorkerMessage}};
 
 #[derive(Debug, PartialEq)]
 pub enum ExitCode {
@@ -30,10 +23,19 @@ impl Termination for ExitCode {
     }
 }
 
-async fn handle_worker_response(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target: ReqTarget) {
+async fn handle_response_msg(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target: ReqTarget) {
     stats.update_req_avg_time(target.time, &target.protocol);
 
     stats.log_response(&target);
+
+    if !target.domain.is_empty() {
+        if let Err(err) = dbm.update_or_insert_domain(&target.domain).await {
+            stats.log_int_err(format!(
+                "Error while saving a domain in the db: {}",
+                err
+            ));
+        };
+    }
 
     let det_responses = detector::detect(&target, &conf.definitions);
 
@@ -49,15 +51,12 @@ async fn handle_worker_response(conf: &Conf, stats: &mut Stats, dbm: &DbMan, tar
 
             stats.log_match(&res);
 
-            let _id = match dbm.save_service(&res).await {
-                Ok(id) => id.to_string(),
-                Err(err) => {
-                    stats.log_int_err(format!(
-                        "Error while saving a matching service in the db: {}",
-                        err
-                    ));
-                    continue;
-                }
+            if let Err(err) = dbm.save_service(&res).await {
+                stats.log_int_err(format!(
+                    "Error while saving a matching service in the db: {}",
+                    err
+                ));
+                continue;
             };
 
             // headless_chrome is unmaintained
@@ -66,6 +65,22 @@ async fn handle_worker_response(conf: &Conf, stats: &mut Stats, dbm: &DbMan, tar
     }
 
     stats.increment_successful(&target.protocol, matching);
+}
+
+async fn handle_portstarget_msg(stats: &mut Stats, dbm: &DbMan, ports_target: PortsTarget) {
+    stats.update_ports_stats(&ports_target);
+
+    let open_ports = ports_target.open_ports();
+    if !open_ports.is_empty() {
+        stats.log_open_ports(&ports_target.ip, &open_ports);
+
+        if let Err(err) = dbm.update_or_insert_ip_ports(&ports_target.ip, open_ports).await {
+            stats.log_int_err(format!(
+                "Error while saving an ip in the db: {}",
+                err
+            ));
+        };
+    }
 }
 
 pub async fn run_worker(conf: &Conf) -> ExitCode {
@@ -93,7 +108,7 @@ pub async fn run_worker(conf: &Conf) -> ExitCode {
 
         match msg {
             WorkerMessage::PortsTarget(ports_target) => {
-                stats.update_ports_stats(ports_target);
+                handle_portstarget_msg(&mut stats, &dbm, ports_target).await;
                 continue;
             }
             WorkerMessage::Fail(target, error_context, error) => {
@@ -111,7 +126,7 @@ pub async fn run_worker(conf: &Conf) -> ExitCode {
                 continue;
             }
             WorkerMessage::Response(target) => {
-                handle_worker_response(conf, &mut stats, &dbm, target).await;
+                handle_response_msg(conf, &mut stats, &dbm, target).await;
                 continue;
             }
             WorkerMessage::NextTarget => {
