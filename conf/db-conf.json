@@ -1,0 +1,6 @@
+{
+    "host": "127.0.0.1",
+    "dbname": "lachesis_dev",
+    "user": "lachesis_agent",
+    "password": "insecure"
+}

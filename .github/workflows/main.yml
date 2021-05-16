@@ -20,12 +20,15 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Run docker-compose (test db)
+        run: docker-compose up -d
+
       - name: (Rust) Install latest nightly
         uses: actions-rs/toolchain@v1
         with:
             toolchain: nightly
             override: true
-            components: rustfmt, clippy
+            components: clippy
 
       - name: (Rust) Clippy
         run: cargo clippy

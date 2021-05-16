@@ -36,6 +36,17 @@ const rowsPerPageOptions = [
   }
 ]
 
+function timestampToDateString (timestamp) {
+  const date = new Date(timestamp)
+
+  return String(date.getDate()).padStart(2, '0') +
+    '/' + String((date.getMonth() + 1)).padStart(2, '0') +
+    '/' + date.getFullYear() +
+    ' ' + String(date.getHours()).padStart(2, '0') +
+    ':' + String(date.getMinutes()).padStart(2, '0') +
+    ':' + String(date.getSeconds()).padStart(2, '0')
+}
+
 function DataTable () {
   const [loading, setLoading] = useState(true)
   const [pagination, setPagination] = useState({
@@ -76,7 +87,10 @@ function DataTable () {
     } else {
       setData({
         headers: res.services.length ? Object.keys(res.services[0]) : [],
-        rows: res.services.map((row) => Object.values(row))
+        rows: res.services.map((row) => Object.values(row)).map((row) => {
+          row[1] = timestampToDateString(row[1])
+          return row
+        })
       })
 
       if (res.rows_count > newPagination.rows) {

@@ -11,13 +11,13 @@ use tokio::{
 };
 
 use crate::{
-    conf::{self, Conf},
+    conf::{self, Conf, DbConf},
     db::DbMan,
     lachesis,
 };
 
 async fn test_server_tcp() {
-    let listener = TcpListener::bind("0.0.0.0:8081").await.unwrap();
+    let listener = TcpListener::bind("0.0.0.0:4000").await.unwrap();
 
     loop {
         let (mut socket, _) = listener.accept().await.unwrap();
@@ -51,7 +51,7 @@ async fn test_html(_req: Request<Body>) -> Result<Response<Body>, Infallible> {
 }
 
 async fn test_server_http() {
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
+    let addr = SocketAddr::from(([0, 0, 0, 0], 4001));
 
     let make_svc = make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(test_html)) });
 
@@ -64,7 +64,12 @@ async fn test_server_http() {
 
 fn test_conf() -> Conf {
     let mut conf = Conf::default();
-    conf.db_path = "./data/db/test".to_string();
+    conf.db_conf = DbConf {
+        host: "127.0.0.1".to_string(),
+        dbname: "lachesis_dev".to_string(),
+        user: "lachesis_agent".to_string(),
+        password: "insecure".to_string()
+    };
     conf.dataset = "./resources/test-dataset.json".to_string();
     conf.definitions = conf::parse_validate_definitions(&[
         "./resources/test-definition-http.json".to_string(),
@@ -76,8 +81,6 @@ fn test_conf() -> Conf {
 
 #[tokio::test]
 async fn test_overall() {
-    fs::remove_file("./data/db/test").unwrap_or_default();
-
     let rt = runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -93,10 +96,9 @@ async fn test_overall() {
 
     rt.shutdown_background();
 
-    let db = DbMan::init(Some("./data/db/test".to_string())).unwrap();
-    let services = db.get_paginated_services(0, 100).unwrap();
+    let db = DbMan::init(&conf.db_conf).await.unwrap();
+    let services = db.get_paginated_services(0, 100).await.unwrap();
 
-    assert_eq!(services.rows_count, 40);
-
-    fs::remove_file("./data/db/test").unwrap_or_default();
+    assert_eq!(services.rows_count, 2);
+    // TODO - Check the other tables
 }

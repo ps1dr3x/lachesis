@@ -3,7 +3,7 @@
         "name": "Test TCP",
         "protocol": "tcp/custom",
         "options": {
-            "ports": [80, 8081],
+            "ports": [80, 4000],
             "timeout": true,
             "message": "Ciao!\r\n"
         },

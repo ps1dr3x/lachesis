@@ -14,9 +14,28 @@ use crate::validators::{
     validate_definition, validate_protocol, validate_regex, validate_regex_ver, validate_semver,
 };
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DbConf {
+    pub host: String,
+    pub dbname: String,
+    pub user: String,
+    pub password: String
+}
+
+impl Default for DbConf {
+    fn default() -> DbConf {
+        DbConf {
+            host: String::new(),
+            dbname: String::new(),
+            user: String::new(),
+            password: String::new(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Validate)]
 pub struct Conf {
-    pub db_path: String,
+    pub db_conf: DbConf,
     #[validate]
     pub definitions: Vec<Definition>,
     pub dataset: String,
@@ -29,10 +48,10 @@ pub struct Conf {
     pub web_ui: bool,
 }
 
-impl Conf {
-    pub fn default() -> Conf {
+impl Default for Conf {
+    fn default() -> Conf {
         Conf {
-            db_path: "data/db/services".to_string(),
+            db_conf: DbConf::default(),
             definitions: Vec::new(),
             dataset: String::new(),
             subnets: Arc::new(Mutex::new((Vec::new(), 0))),
@@ -149,7 +168,21 @@ pub fn parse_validate_definitions(paths: &[String]) -> Result<Vec<Definition>, S
     Ok(definitions)
 }
 
+pub fn load_db_conf() -> Result<DbConf, &'static str> {
+    let file = match File::open("conf/db-conf.json") {
+        Ok(f) => f,
+        Err(_) => return Err("The Db conf file conf/db-conf.json doesn't exist or is not readable")
+    };
+
+    match serde_json::from_reader(file) {
+        Ok(db_conf) => Ok(db_conf),
+        Err(_) => Err("The Db conf file conf/db-conf.json is invalid (json parse error)")
+    }
+}
+
 pub fn load() -> Result<Conf, &'static str> {
+    let db_conf = load_db_conf()?;
+
     // Get cli parameters according to the definition file
     let cli_yaml = load_yaml!("cli.yml");
     let matches = App::from_yaml(cli_yaml).get_matches();
@@ -285,6 +318,7 @@ pub fn load() -> Result<Conf, &'static str> {
     };
 
     Ok(Conf {
+        db_conf,
         definitions,
         dataset,
         subnets,

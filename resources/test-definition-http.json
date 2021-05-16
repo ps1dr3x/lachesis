@@ -3,10 +3,7 @@
         "name": "Test HTTP",
         "protocol": "http/s",
         "options": {
-            "ports": [
-                80,
-                8080
-            ]
+            "ports": [80, 4001]
         },
         "service": {
             "regex": "(?i)Hello lachesis(?-i)",

@@ -1,4 +1,4 @@
-use std::{fmt::Debug, process::Termination, sync::mpsc as sync_mpsc, thread};
+use std::{fmt::Debug, process::Termination};
 
 use colored::Colorize;
 use tokio::{
@@ -30,7 +30,7 @@ impl Termination for ExitCode {
     }
 }
 
-fn handle_worker_response(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target: ReqTarget) {
+async fn handle_worker_response(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target: ReqTarget) {
     stats.update_req_avg_time(target.time, &target.protocol);
 
     stats.log_response(&target);
@@ -49,11 +49,11 @@ fn handle_worker_response(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target: R
 
             stats.log_match(&res);
 
-            let _id = match dbm.save_service(&res) {
+            let _id = match dbm.save_service(&res).await {
                 Ok(id) => id.to_string(),
                 Err(err) => {
                     stats.log_int_err(format!(
-                        "Error while saving a matching service in the embedded db: {}",
+                        "Error while saving a matching service in the db: {}",
                         err
                     ));
                     continue;
@@ -71,7 +71,7 @@ fn handle_worker_response(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target: R
 pub async fn run_worker(conf: &Conf) -> ExitCode {
     let mut stats = Stats::new(conf.max_targets);
 
-    let dbm = match DbMan::init(Some(conf.db_path.clone())) {
+    let dbm = match DbMan::init(&conf.db_conf).await {
         Ok(dbm) => dbm,
         Err(err) => {
             stats.log_int_err(format!("Db initialization error: {}", err));
@@ -111,7 +111,7 @@ pub async fn run_worker(conf: &Conf) -> ExitCode {
                 continue;
             }
             WorkerMessage::Response(target) => {
-                handle_worker_response(conf, &mut stats, &dbm, target);
+                handle_worker_response(conf, &mut stats, &dbm, target).await;
                 continue;
             }
             WorkerMessage::NextTarget => {
@@ -131,16 +131,15 @@ pub async fn run_worker(conf: &Conf) -> ExitCode {
     ExitCode::Ok
 }
 
-fn run_ui() -> ExitCode {
-    let (tx, rx): (sync_mpsc::Sender<UIMessage>, sync_mpsc::Receiver<UIMessage>) =
-        sync_mpsc::channel();
+async fn run_ui() -> ExitCode {
+    let (tx, mut rx): (Sender<UIMessage>, Receiver<UIMessage>) = mpsc::channel(100);
 
-    thread::spawn(move || web::run(tx));
+    tokio::spawn(web::run(tx));
 
     loop {
-        match rx.recv() {
-            Ok(msg) => println!("{}", msg.message),
-            Err(_) => continue,
+        match rx.recv().await {
+            Some(msg) => println!("{}", msg.message),
+            None => continue,
         };
     }
 }
@@ -154,10 +153,10 @@ pub fn run() -> ExitCode {
         }
     };
 
+    let rt = Builder::new_multi_thread().enable_all().build().unwrap();
     if conf.web_ui {
-        run_ui()
+        rt.block_on(run_ui())
     } else {
-        let rt = Builder::new_multi_thread().enable_all().build().unwrap();
         rt.block_on(run_worker(&conf))
     }
 }

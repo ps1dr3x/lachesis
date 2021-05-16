@@ -71,7 +71,7 @@ OPTIONS:
 - Plugin system/API to expand or integrate the scanner's capabilities
 - Additional information gathering on the known hosts (e.g. further scan after specific findings, periodic checks)
 - Improve the web API and the Web UI (a geo map showing the findings would be nice)
-- Distributed DB support and agent mode
+- A more structured "agent mode" for continuous scanning
 
 ## Build from source
 
@@ -82,6 +82,7 @@ OPTIONS:
 - On Linux and BSD based OS:
   - pkg-config (pkg-config on deb, pkg-config/pkgconfig/pkgconf-pkg-config on rpm)
   - libssl (libssl-dev on deb, openssl-devel on rpm)
+- [Docker, Docker Compose](https://www.docker.com/): Needed for running the tests (test db)
 
 ### Compile and run (development)
 
@@ -104,6 +105,13 @@ cargo run -- --help
 
 ```bash
 ./scripts/build-release.sh
+```
+
+### Tests
+
+```bash
+docker-compose up -d
+cargo test
 ```
 
 ### Troubleshooting
