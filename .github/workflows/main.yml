@@ -28,13 +28,6 @@ jobs:
         with:
             toolchain: nightly
             override: true
-            components: clippy
-
-      - name: (Rust) Clippy
-        run: cargo clippy
-
-      - name: (Rust) Build
-        run: cargo build --release --verbose
 
       - name: (Rust) Test
         run: cargo test
