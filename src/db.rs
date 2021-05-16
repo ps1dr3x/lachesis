@@ -1,8 +1,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use colored::Colorize;
 use serde_derive::{Deserialize, Serialize};
 use tokio_postgres::{connect, Client, Error, NoTls};
-use colored::Colorize;
 
 use crate::{conf::DbConf, detector::DetectorResponse};
 
@@ -32,7 +32,10 @@ pub struct DbMan {
 impl DbMan {
     pub async fn init(db_conf: &DbConf) -> Result<Self, Error> {
         let (client, connection) = connect(
-            &format!("host={} dbname={} user={} password={}", db_conf.host, db_conf.dbname, db_conf.user, db_conf.password),
+            &format!(
+                "host={} dbname={} user={} password={}",
+                db_conf.host, db_conf.dbname, db_conf.user, db_conf.password
+            ),
             NoTls,
         )
         .await?;
@@ -169,10 +172,11 @@ impl DbMan {
         Ok(DbMan { client })
     }
 
-    async fn update_or_insert_ip_ports(&self, ip: &String, ports: Vec<i32>) -> Result<i64, Error> {
+    async fn update_or_insert_ip_ports(&self, ip: &str, ports: Vec<i32>) -> Result<i64, Error> {
         let stmt = self
             .client
-            .prepare("
+            .prepare(
+                "
                 INSERT INTO ips_ports (ip, ports)
                 VALUES ($1, $2)
                 ON CONFLICT (ip) DO UPDATE
@@ -181,17 +185,16 @@ impl DbMan {
             ",
             )
             .await?;
-        let res = self.client
-            .query_one(&stmt, &[&ip, &ports])
-            .await?;
+        let res = self.client.query_one(&stmt, &[&ip, &ports]).await?;
 
         Ok(res.get(0))
     }
 
-    async fn update_or_insert_domain(&self, domain: &String) -> Result<i64, Error> {
+    async fn update_or_insert_domain(&self, domain: &str) -> Result<i64, Error> {
         let stmt = self
             .client
-            .prepare("
+            .prepare(
+                "
                 INSERT INTO domains (domain)
                 VALUES ($1)
                 ON CONFLICT (domain) DO UPDATE
@@ -201,15 +204,15 @@ impl DbMan {
             ",
             )
             .await?;
-        let res = self.client
-            .query_one(&stmt, &[&domain])
-            .await?;
+        let res = self.client.query_one(&stmt, &[&domain]).await?;
 
         Ok(res.get(0))
     }
 
     pub async fn save_service(&self, service: &DetectorResponse) -> Result<u64, Error> {
-        let ip_id = self.update_or_insert_ip_ports(&service.target.ip, [service.target.port as i32].to_vec()).await?; // WIP
+        let ip_id = self
+            .update_or_insert_ip_ports(&service.target.ip, [service.target.port as i32].to_vec())
+            .await?; // WIP
 
         if !service.target.domain.is_empty() {
             self.update_or_insert_domain(&service.target.domain).await?;
@@ -274,7 +277,11 @@ impl DbMan {
         let services = services.iter().map(|row| {
             Ok(ServicesRow {
                 id: row.get(0),
-                first_seen: row.get::<_, SystemTime>(1).duration_since(UNIX_EPOCH).unwrap().as_millis(),
+                first_seen: row
+                    .get::<_, SystemTime>(1)
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis(),
                 service: row.get(2),
                 version: row.get(3),
                 description: row.get(4),

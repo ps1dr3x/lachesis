@@ -10,12 +10,12 @@ use std::{
 
 use crate::{
     conf,
-    db::{DbMan, PaginatedServices}
+    db::{DbMan, PaginatedServices},
 };
 
 struct Shared {
     db: DbMan,
-    tx: Arc<Mutex<Sender<UIMessage>>>
+    tx: Arc<Mutex<Sender<UIMessage>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -55,10 +55,7 @@ async fn services(
 }
 
 #[delete("/services", format = "application/json", data = "<ids>")]
-async fn del_services(
-    state: &State<Shared>,
-    ids: Json<Vec<i64>>,
-) -> Result<&str, Status> {
+async fn del_services(state: &State<Shared>, ids: Json<Vec<i64>>) -> Result<&str, Status> {
     match state.db.delete_services(ids.to_vec()).await {
         Ok(_ss) => Ok("OK"),
         Err(err) => {
@@ -85,17 +82,15 @@ pub async fn run(tx: Sender<UIMessage>) -> Result<(), rocket::Error> {
     let db_conf = match conf::load_db_conf() {
         Ok(db_conf) => db_conf,
         Err(err) => {
-            panic!("[{}] Db conf file error: {}",
-                "ERROR".red(),
-                err
-            );
+            panic!("[{}] Db conf file error: {}", "ERROR".red(), err);
         }
     };
 
     let db = match DbMan::init(&db_conf).await {
         Ok(db) => db,
         Err(err) => {
-            panic!("[{}] Db initialization/connection error: {}",
+            panic!(
+                "[{}] Db initialization/connection error: {}",
                 "ERROR".red(),
                 err
             );
@@ -107,7 +102,7 @@ pub async fn run(tx: Sender<UIMessage>) -> Result<(), rocket::Error> {
         .mount("/api", routes![services, del_services])
         .manage(Shared {
             db,
-            tx: Arc::new(Mutex::new(tx))
+            tx: Arc::new(Mutex::new(tx)),
         })
         .register("/", catchers![internal_server_error, not_found])
         .ignite()

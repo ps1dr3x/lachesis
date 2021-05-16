@@ -68,7 +68,7 @@ fn test_conf() -> Conf {
         host: "127.0.0.1".to_string(),
         dbname: "lachesis_dev".to_string(),
         user: "lachesis_agent".to_string(),
-        password: "insecure".to_string()
+        password: "insecure".to_string(),
     };
     conf.dataset = "./resources/test-dataset.json".to_string();
     conf.definitions = conf::parse_validate_definitions(&[

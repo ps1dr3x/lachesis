@@ -19,7 +19,7 @@ pub struct DbConf {
     pub host: String,
     pub dbname: String,
     pub user: String,
-    pub password: String
+    pub password: String,
 }
 
 impl Default for DbConf {
@@ -171,12 +171,14 @@ pub fn parse_validate_definitions(paths: &[String]) -> Result<Vec<Definition>, S
 pub fn load_db_conf() -> Result<DbConf, &'static str> {
     let file = match File::open("conf/db-conf.json") {
         Ok(f) => f,
-        Err(_) => return Err("The Db conf file conf/db-conf.json doesn't exist or is not readable")
+        Err(_) => {
+            return Err("The Db conf file conf/db-conf.json doesn't exist or is not readable")
+        }
     };
 
     match serde_json::from_reader(file) {
         Ok(db_conf) => Ok(db_conf),
-        Err(_) => Err("The Db conf file conf/db-conf.json is invalid (json parse error)")
+        Err(_) => Err("The Db conf file conf/db-conf.json is invalid (json parse error)"),
     }
 }
 
@@ -189,9 +191,10 @@ pub fn load() -> Result<Conf, &'static str> {
 
     // If --web-ui/-w option is specified, nothing else is needed
     if matches.is_present("web_ui") {
-        let mut conf = Conf::default();
-        conf.web_ui = true;
-        return Ok(conf);
+        return Ok(Conf {
+            web_ui: true,
+            ..Default::default()
+        });
     }
 
     // If a value for --dataset/-D is specified, check that the file exists
@@ -328,6 +331,5 @@ pub fn load() -> Result<Conf, &'static str> {
         max_concurrent_requests,
         debug: matches.is_present("debug"),
         web_ui: false,
-        ..Conf::default()
     })
 }
