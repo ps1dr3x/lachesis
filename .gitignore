@@ -4,10 +4,6 @@
 node_modules
 logs/*
 !logs/.gitkeep
-data/db/*
-!data/db/.gitkeep
-data/screenshots/*
-!data/screenshots/.gitkeep
 dist/*
 !dist/.gitkeep
 resources/ui/*
