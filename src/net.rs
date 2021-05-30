@@ -70,6 +70,7 @@ pub fn build_https_client() -> Client<HttpsConnector<HttpConnector>> {
 pub struct HttpsOptions {
     pub method: String,
     pub path: String,
+    pub headers: Vec<(String, String)>,
     pub payload: String,
 }
 
@@ -88,14 +89,18 @@ pub async fn http_s(
     .parse()
     .unwrap();
 
-    let request = Request::builder()
+    let mut request = Request::builder()
         .uri(uri)
         .method(Method::from_bytes(options.method.as_bytes()).unwrap())
         .header("Host", target.domain.clone())
         .header("User-Agent", user_agent.clone())
-        .header("Accept", "*/*")
-        .body(Body::from(options.payload))
-        .unwrap();
+        .header("Accept", "*/*");
+
+    for (header, value) in options.headers {
+        request = request.header(&header, &value);
+    }
+
+    let request = request.body(Body::from(options.payload)).unwrap();
 
     let time = Duration::from_secs(timeout);
     let request = async {

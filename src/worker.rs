@@ -121,12 +121,13 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
     for def in &ws.conf.definitions {
         match def.protocol.as_str() {
             "http/s" => {
-                // Avoid duplicate requests (same port, method, path and payload)
+                // Avoid duplicate requests (same port, method, path, headers and payload)
                 for port in &def.options.ports {
                     if open_ports.contains(port) {
                         let options = HttpsOptions {
                             method: def.options.method.clone().unwrap_or("GET".to_string()),
                             path: def.options.path.clone().unwrap_or("/".to_string()),
+                            headers: def.options.headers.clone().unwrap_or(Vec::new()),
                             payload: def.options.payload.clone().unwrap_or("".to_string()),
                         };
                         http_s_unique_opts.insert((*port, options));

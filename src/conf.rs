@@ -85,6 +85,7 @@ pub struct Options {
     pub method: Option<String>,
     #[validate(custom = "validate_path")]
     pub path: Option<String>,
+    pub headers: Option<Vec<(String, String)>>,
     pub ports: Vec<u16>,
     pub timeout: Option<bool>,
     pub payload: Option<String>,
