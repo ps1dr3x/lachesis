@@ -18,7 +18,9 @@
                 8083,
                 9000,
                 3000
-            ]
+            ],
+            "method": "GET",
+            "path": "/"
         },
         "service": {
             "regex": "IPCamera_Logo|MJPG-Streamer|(?i)webcam server(?-i)",

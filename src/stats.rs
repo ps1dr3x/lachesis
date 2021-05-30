@@ -163,7 +163,7 @@ impl Stats {
             self.matching += 1;
         }
 
-        self.update_message();
+        self.update_messages();
     }
 
     pub fn increment_failed(&mut self, protocol: &str) {
@@ -175,7 +175,7 @@ impl Stats {
             _ => (),
         }
 
-        self.update_message();
+        self.update_messages();
     }
 
     pub fn increment_timedout(&mut self, protocol: &str) {
@@ -187,7 +187,7 @@ impl Stats {
             _ => (),
         }
 
-        self.update_message();
+        self.update_messages();
     }
 
     pub fn increment_targets(&mut self) {
@@ -197,7 +197,7 @@ impl Stats {
 
         self.targets += 1;
 
-        self.update_message();
+        self.update_messages();
     }
 
     pub fn update_req_avg_time(&mut self, time: Instant, protocol: &str) {
@@ -226,10 +226,10 @@ impl Stats {
             _ => (),
         };
 
-        self.update_message();
+        self.update_messages();
     }
 
-    fn update_message(&self) {
+    fn update_messages(&self) {
         self.progress_bars[1].set_message(format!(
             "Targets: {} Requests: {} Req/sec: {} Matching: {}",
             self.targets.to_string().cyan(),
@@ -279,7 +279,7 @@ impl Stats {
         self.progress_bars[0].println(format!("[{}] {}", "ERROR".red(), message));
     }
 
-    pub fn log_open_ports(&mut self, ip: &String, ports: &Vec<u16>) {
+    pub fn log_open_ports(&mut self, ip: &str, ports: &[u16]) {
         self.progress_bars[0].println(format!(
             "[{}][{}] Open ports: {}",
             "OPEN_PORTS".blue(),

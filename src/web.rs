@@ -1,6 +1,5 @@
 use colored::Colorize;
-use rocket::{self, http::Status, response::NamedFile, Request, State};
-use rocket_contrib::json::Json;
+use rocket::{self, fs::NamedFile, http::Status, serde::json::Json, Request, State};
 use tokio::sync::{mpsc::Sender, Mutex};
 
 use std::{

@@ -5,14 +5,14 @@ use std::{
 
 use hyper::{
     client::{Client, HttpConnector},
-    Body, Request, Uri,
+    Body, Method, Request, Uri,
 };
 use hyper_tls::HttpsConnector;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
     sync::mpsc::Sender,
-    time::timeout,
+    time,
 };
 use tokio_native_tls::TlsConnector;
 
@@ -26,7 +26,7 @@ pub async fn test_port(ip: String, port: u16, timeout_millis: u64) -> PortTarget
         time: Instant::now(),
     };
 
-    match timeout(
+    match time::timeout(
         Duration::from_millis(timeout_millis),
         TcpStream::connect(&addr),
     )
@@ -66,43 +66,49 @@ pub fn build_https_client() -> Client<HttpsConnector<HttpConnector>> {
         .build(https)
 }
 
-pub struct HttpsRequest {
-    pub tx: Sender<WorkerMessage>,
-    pub client: Client<HttpsConnector<HttpConnector>>,
-    pub target: ReqTarget,
-    pub user_agent: String,
-    pub timeout: u64,
+#[derive(Hash, Eq, PartialEq, Debug, Clone)]
+pub struct HttpsOptions {
+    pub method: String,
+    pub path: String,
+    pub payload: String,
 }
 
-pub async fn http_s(mut req: HttpsRequest) {
+pub async fn http_s(
+    tx: Sender<WorkerMessage>,
+    client: Client<HttpsConnector<HttpConnector>>,
+    mut target: ReqTarget,
+    options: HttpsOptions,
+    user_agent: String,
+    timeout: u64,
+) {
     let uri: Uri = format!(
-        "{}://{}:{}",
-        req.target.protocol, req.target.ip, req.target.port
+        "{}://{}:{}{}",
+        target.protocol, target.ip, target.port, options.path
     )
     .parse()
     .unwrap();
 
     let request = Request::builder()
         .uri(uri)
-        .header("Host", req.target.domain.clone())
-        .header("User-Agent", req.user_agent.clone())
+        .method(Method::from_bytes(options.method.as_bytes()).unwrap())
+        .header("Host", target.domain.clone())
+        .header("User-Agent", user_agent.clone())
         .header("Accept", "*/*")
-        .body(Body::empty())
+        .body(Body::from(options.payload))
         .unwrap();
 
-    let time = Duration::from_secs(req.timeout);
+    let time = Duration::from_secs(timeout);
     let request = async {
-        let (parts, body) = match req.client.request(request).await {
+        let (parts, body) = match client.request(request).await {
             Ok(r) => r.into_parts(),
             Err(e) => {
-                req.tx
-                    .send(WorkerMessage::Fail(
-                        req.target.clone(),
-                        "Request error".to_string(),
-                        Some(e.to_string()),
-                    ))
-                    .await
-                    .unwrap();
+                tx.send(WorkerMessage::Fail(
+                    target.clone(),
+                    "Request error".to_string(),
+                    Some(e.to_string()),
+                ))
+                .await
+                .unwrap();
                 return;
             }
         };
@@ -121,84 +127,76 @@ pub async fn http_s(mut req: HttpsRequest) {
                 }
                 raw_content = format!("{}\r\n{}", raw_content, String::from_utf8_lossy(&b));
 
-                req.target.response = raw_content;
+                target.response = raw_content;
 
-                req.tx
-                    .send(WorkerMessage::Response(req.target.clone()))
+                tx.send(WorkerMessage::Response(target.clone()))
                     .await
                     .unwrap();
             }
             Err(e) => {
-                req.tx
-                    .send(WorkerMessage::Fail(
-                        req.target.clone(),
-                        "Response error".to_string(),
-                        Some(e.to_string()),
-                    ))
-                    .await
-                    .unwrap();
+                tx.send(WorkerMessage::Fail(
+                    target.clone(),
+                    "Response error".to_string(),
+                    Some(e.to_string()),
+                ))
+                .await
+                .unwrap();
             }
         };
     };
 
-    if timeout(time, request).await.is_err() {
-        req.tx
-            .send(WorkerMessage::Timeout(req.target.clone()))
+    if time::timeout(time, request).await.is_err() {
+        tx.send(WorkerMessage::Timeout(target.clone()))
             .await
             .unwrap();
     }
 }
 
-pub struct TcpRequest {
-    pub tx: Sender<WorkerMessage>,
-    pub target: ReqTarget,
-    pub message: String,
-    pub timeout: u64,
-}
-
-pub async fn tcp_custom(mut req: TcpRequest) {
-    let addr = match format!("{}:{}", req.target.ip, req.target.port).parse::<SocketAddr>() {
+pub async fn tcp_custom(
+    tx: Sender<WorkerMessage>,
+    mut target: ReqTarget,
+    payload: String,
+    timeout: u64,
+) {
+    let addr = match format!("{}:{}", target.ip, target.port).parse::<SocketAddr>() {
         Ok(addr) => addr,
         Err(_e) => {
-            req.tx
-                .send(WorkerMessage::Fail(
-                    req.target,
-                    "Invalid address".to_string(),
-                    None,
-                ))
-                .await
-                .unwrap();
+            tx.send(WorkerMessage::Fail(
+                target,
+                "Invalid address".to_string(),
+                None,
+            ))
+            .await
+            .unwrap();
             return;
         }
     };
 
-    let to = Duration::from_secs(req.timeout);
+    let to = Duration::from_secs(timeout);
     let cb = async {
         let mut stream = match TcpStream::connect(&addr).await {
             Ok(s) => s,
             Err(e) => {
-                req.tx
-                    .send(WorkerMessage::Fail(
-                        req.target.clone(),
-                        "TCP stream connection error".to_string(),
-                        Some(e.to_string()),
-                    ))
-                    .await
-                    .unwrap();
+                tx.send(WorkerMessage::Fail(
+                    target.clone(),
+                    "TCP stream connection error".to_string(),
+                    Some(e.to_string()),
+                ))
+                .await
+                .unwrap();
                 return;
             }
         };
 
         stream.writable().await.unwrap();
-        if let Err(e) = stream.write_all(req.message.as_bytes()).await {
-            req.tx
-                .send(WorkerMessage::Fail(
-                    req.target.clone(),
-                    "TCP stream write error".to_string(),
-                    Some(e.to_string()),
-                ))
-                .await
-                .unwrap();
+        if let Err(e) = stream.write_all(payload.as_bytes()).await {
+            tx.send(WorkerMessage::Fail(
+                target.clone(),
+                "TCP stream write error".to_string(),
+                Some(e.to_string()),
+            ))
+            .await
+            .unwrap();
             return;
         }
 
@@ -214,14 +212,13 @@ pub async fn tcp_custom(mut req: TcpRequest) {
                     response_lenght += n;
                 }
                 Err(e) => {
-                    req.tx
-                        .send(WorkerMessage::Fail(
-                            req.target.clone(),
-                            "TCP stream read error".to_string(),
-                            Some(e.to_string()),
-                        ))
-                        .await
-                        .unwrap();
+                    tx.send(WorkerMessage::Fail(
+                        target.clone(),
+                        "TCP stream read error".to_string(),
+                        Some(e.to_string()),
+                    ))
+                    .await
+                    .unwrap();
                     return;
                 }
             };
@@ -229,17 +226,15 @@ pub async fn tcp_custom(mut req: TcpRequest) {
 
         if response_lenght > 0 {
             response.truncate(response_lenght);
-            req.target.response = String::from_utf8_lossy(&response).to_string();
-            req.tx
-                .send(WorkerMessage::Response(req.target.clone()))
+            target.response = String::from_utf8_lossy(&response).to_string();
+            tx.send(WorkerMessage::Response(target.clone()))
                 .await
                 .unwrap();
         }
     };
 
-    if timeout(to, cb).await.is_err() {
-        req.tx
-            .send(WorkerMessage::Timeout(req.target.clone()))
+    if time::timeout(to, cb).await.is_err() {
+        tx.send(WorkerMessage::Timeout(target.clone()))
             .await
             .unwrap();
     };

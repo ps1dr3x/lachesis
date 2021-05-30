@@ -3,10 +3,9 @@
         "name": "wordpress",
         "protocol": "http/s",
         "options": {
-            "ports": [
-                80,
-                443
-            ]
+            "ports": [80, 443],
+            "method": "GET",
+            "path": "/"
         },
         "service": {
             "regex": "(?m)<meta name=\"generator\" content=\"WordPress (?-m)",

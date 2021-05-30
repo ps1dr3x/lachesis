@@ -5,7 +5,7 @@
         "options": {
             "ports": [5900],
             "timeout": true,
-            "message": "RFB 003.008\n"
+            "payload": "RFB 003.008\n"
         },
         "service": {
             "regex": "RFB ",

@@ -5,7 +5,7 @@
         "options": {
             "ports": [22],
             "timeout": false,
-            "message": "Could you kindly tell me if you are sshd?\r\n"
+            "payload": "Could you kindly tell me if you are sshd?\r\n"
         },
         "service": {
             "regex": "SSH-",

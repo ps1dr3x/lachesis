@@ -6,7 +6,14 @@ use tokio::{
     sync::mpsc::{self, Receiver, Sender},
 };
 
-use crate::{conf::{self, Conf}, db::DbMan, detector, stats::Stats, web::{self, UIMessage}, worker::{self, PortsTarget, ReqTarget, WorkerMessage}};
+use crate::{
+    conf::{self, Conf},
+    db::DbMan,
+    detector,
+    stats::Stats,
+    web::{self, UIMessage},
+    worker::{self, PortsTarget, ReqTarget, WorkerMessage},
+};
 
 #[derive(Debug, PartialEq)]
 pub enum ExitCode {
@@ -30,10 +37,7 @@ async fn handle_response_msg(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target
 
     if !target.domain.is_empty() {
         if let Err(err) = dbm.update_or_insert_domain(&target.domain).await {
-            stats.log_int_err(format!(
-                "Error while saving a domain in the db: {}",
-                err
-            ));
+            stats.log_int_err(format!("Error while saving a domain in the db: {}", err));
         };
     }
 
@@ -74,9 +78,12 @@ async fn handle_portstarget_msg(stats: &mut Stats, dbm: &DbMan, ports_target: Po
     if !open_ports.is_empty() {
         stats.log_open_ports(&ports_target.ip, &open_ports);
 
-        if let Err(err) = dbm.update_or_insert_ip_ports(&ports_target.ip, open_ports).await {
+        if let Err(err) = dbm
+            .update_or_insert_ip_ports(&ports_target.ip, open_ports)
+            .await
+        {
             stats.log_int_err(format!(
-                "Error while saving an ip in the db: {}",
+                "Error while saving ip and ports in the db: {}",
                 err
             ));
         };

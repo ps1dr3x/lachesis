@@ -5,7 +5,7 @@
         "options": {
             "ports": [80, 4000],
             "timeout": true,
-            "message": "Ciao!\r\n"
+            "payload": "Ciao!\r\n"
         },
         "service": {
             "regex": "(?i)lachesis(?-i)",

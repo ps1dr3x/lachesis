@@ -4,14 +4,15 @@ use std::{
     sync::Arc,
 };
 
-use clap::App;
+use clap::{App, Values};
 use ipnet::{Ipv4AddrRange, Ipv4Net};
 use serde_derive::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use validator::Validate;
 
 use crate::validators::{
-    validate_definition, validate_protocol, validate_regex, validate_regex_ver, validate_semver,
+    validate_definition, validate_method, validate_path, validate_protocol, validate_regex,
+    validate_regex_ver, validate_semver,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -78,11 +79,15 @@ pub struct Definition {
     pub versions: Option<Versions>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Validate)]
 pub struct Options {
+    #[validate(custom = "validate_method")]
+    pub method: Option<String>,
+    #[validate(custom = "validate_path")]
+    pub path: Option<String>,
     pub ports: Vec<u16>,
     pub timeout: Option<bool>,
-    pub message: Option<String>,
+    pub payload: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Validate)]
@@ -132,7 +137,10 @@ pub fn parse_validate_definitions(paths: &[String]) -> Result<Vec<Definition>, S
         let def_file = match File::open(&path) {
             Ok(file) => file,
             Err(_err) => {
-                return Err(format!("Definition file: {} not found.", path));
+                return Err(format!(
+                    "Definition file: {} not found or not readable.",
+                    path
+                ));
             }
         };
 
@@ -166,6 +174,65 @@ pub fn parse_validate_definitions(paths: &[String]) -> Result<Vec<Definition>, S
     }
 
     Ok(definitions)
+}
+
+fn search_definitions(
+    user_selected: Option<Values>,
+    user_excluded: Option<Values>,
+) -> Result<Vec<String>, &'static str> {
+    match user_selected {
+        Some(paths) => {
+            let mut defs = Vec::new();
+
+            for path in paths {
+                if Path::new(&format!("resources/definitions/{}.json", path)).exists() {
+                    defs.push(format!("resources/definitions/{}.json", path));
+                } else if Path::new(&format!("resources/definitions/{}", path)).exists() {
+                    defs.push(format!("resources/definitions/{}", path));
+                } else if Path::new(&path).exists() {
+                    defs.push(String::from(path));
+                } else {
+                    return Err("Invalid value for parameter --def/-d (file not found)");
+                }
+            }
+
+            Ok(defs)
+        }
+        None => {
+            let mut defs = Vec::new();
+            let mut excluded = Vec::new();
+
+            if let Some(edefs) = user_excluded {
+                for edef in edefs {
+                    excluded.push(edef);
+                }
+            };
+
+            let paths = fs::read_dir("resources/definitions").unwrap();
+            for path in paths {
+                let path = path.unwrap();
+                let file_name = path.file_name();
+                let file_name = file_name.to_str().unwrap();
+                match file_name.find(".json") {
+                    Some(idx) => {
+                        if !excluded.contains(&file_name) && !excluded.contains(&&file_name[0..idx])
+                        {
+                            defs.push(path.path().to_str().unwrap().to_string());
+                        }
+                    }
+                    None => {
+                        return Err("Found extraneous files in resources/definitions (not .json)")
+                    }
+                }
+            }
+
+            if defs.is_empty() {
+                return Err("No definition files found in resources/definitions");
+            }
+
+            Ok(defs)
+        }
+    }
 }
 
 pub fn load_db_conf() -> Result<DbConf, &'static str> {
@@ -240,59 +307,8 @@ pub fn load() -> Result<Conf, &'static str> {
 
     // Load definitions (selected ones or all the files in resources/definitions folder
     // minus the excluded ones)
-    let definitions_paths = match matches.values_of("def") {
-        Some(paths) => {
-            let mut defs = Vec::new();
-
-            for path in paths {
-                if Path::new(&format!("resources/definitions/{}.json", path)).exists() {
-                    defs.push(format!("resources/definitions/{}.json", path));
-                } else if Path::new(&format!("resources/definitions/{}", path)).exists() {
-                    defs.push(format!("resources/definitions/{}", path));
-                } else if Path::new(&path).exists() {
-                    defs.push(String::from(path));
-                } else {
-                    return Err("Invalid value for parameter --def/-d (file not found)");
-                }
-            }
-
-            defs
-        }
-        None => {
-            let mut defs = Vec::new();
-            let mut excluded = Vec::new();
-
-            if let Some(edefs) = matches.values_of("exclude_def") {
-                for edef in edefs {
-                    excluded.push(edef);
-                }
-            };
-
-            let paths = fs::read_dir("resources/definitions").unwrap();
-            for path in paths {
-                let path = path.unwrap();
-                let file_name = path.file_name();
-                let file_name = file_name.to_str().unwrap();
-                match file_name.find(".json") {
-                    Some(idx) => {
-                        if !excluded.contains(&file_name) && !excluded.contains(&&file_name[0..idx])
-                        {
-                            defs.push(path.path().to_str().unwrap().to_string());
-                        }
-                    }
-                    None => {
-                        return Err("Found extraneous files in resources/definitions (not .json)")
-                    }
-                }
-            }
-
-            if defs.is_empty() {
-                return Err("No definition files found in resources/definitions");
-            }
-
-            defs
-        }
-    };
+    let definitions_paths =
+        search_definitions(matches.values_of("def"), matches.values_of("exclude_def"))?;
     let definitions = match parse_validate_definitions(&definitions_paths) {
         Ok(definitions) => definitions,
         Err(err) => {

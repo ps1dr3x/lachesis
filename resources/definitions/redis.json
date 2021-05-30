@@ -5,7 +5,7 @@
         "options": {
             "ports": [6379],
             "timeout": true,
-            "message": "PING\r\n"
+            "payload": "PING\r\n"
         },
         "service": {
             "regex": "\\+PONG|\\-NOAUTH|\\-MISCONF|\\-DENIED",

@@ -20,7 +20,7 @@ use tokio::{
 
 use crate::{
     conf::{Conf, Definition},
-    net::{self, HttpsRequest, TcpRequest},
+    net::{self, HttpsOptions},
 };
 
 // Timeout estimation formula from nmap
@@ -117,14 +117,19 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
     )
     .await;
 
-    let mut http_s_ports = HashSet::new();
+    let mut http_s_unique_opts = HashSet::new();
     for def in &ws.conf.definitions {
         match def.protocol.as_str() {
             "http/s" => {
-                // Only one http/s request per port
+                // Avoid duplicate requests (same port, method, path and payload)
                 for port in &def.options.ports {
                     if open_ports.contains(port) {
-                        http_s_ports.insert(*port);
+                        let options = HttpsOptions {
+                            method: def.options.method.clone().unwrap_or("GET".to_string()),
+                            path: def.options.path.clone().unwrap_or("/".to_string()),
+                            payload: def.options.payload.clone().unwrap_or("".to_string()),
+                        };
+                        http_s_unique_opts.insert((*port, options));
                     }
                 }
             }
@@ -142,13 +147,13 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
                     target.port = *port;
                     target.time = Instant::now();
 
-                    let req = TcpRequest {
-                        tx: tx.clone(),
-                        target: target.clone(),
-                        message: def.options.message.clone().unwrap(),
-                        timeout: ws.conf.req_timeout,
-                    };
-                    net::tcp_custom(req).await;
+                    net::tcp_custom(
+                        tx.clone(),
+                        target,
+                        def.options.payload.clone().unwrap(),
+                        ws.conf.req_timeout,
+                    )
+                    .await;
 
                     ws.maybe_release_permit().await;
                 }
@@ -158,31 +163,30 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
         }
     }
 
-    if !http_s_ports.is_empty() {
-        for protocol in ["https", "http"].iter() {
-            for port in &http_s_ports {
-                if (*port == 80 && *protocol == "https") || (*port == 443 && *protocol == "http") {
-                    continue;
-                }
-
-                ws.maybe_wait_for_permit().await;
-
-                let mut target = target.clone();
-                target.protocol = protocol.to_string();
-                target.port = *port;
-                target.time = Instant::now();
-
-                let req = HttpsRequest {
-                    tx: tx.clone(),
-                    client: ws.https_client.clone(),
-                    target: target.clone(),
-                    user_agent: ws.conf.user_agent.clone(),
-                    timeout: ws.conf.req_timeout,
-                };
-                net::http_s(req).await;
-
-                ws.maybe_release_permit().await;
+    for protocol in ["https", "http"].iter() {
+        for (port, opts) in &http_s_unique_opts {
+            if (*port == 80 && *protocol == "https") || (*port == 443 && *protocol == "http") {
+                continue;
             }
+
+            ws.maybe_wait_for_permit().await;
+
+            let mut target = target.clone();
+            target.protocol = protocol.to_string();
+            target.port = *port;
+            target.time = Instant::now();
+
+            net::http_s(
+                tx.clone(),
+                ws.https_client.clone(),
+                target,
+                opts.clone(),
+                ws.conf.user_agent.clone(),
+                ws.conf.req_timeout,
+            )
+            .await;
+
+            ws.maybe_release_permit().await;
         }
     }
 
@@ -226,7 +230,7 @@ async fn get_next_subnet_target(conf: &Conf) -> Option<ReqTarget> {
         }
     }
 
-    ip.map(|ip| ReqTarget::new(ip.to_string(), ip.to_string()))
+    ip.map(|ip| ReqTarget::new(String::new(), ip.to_string()))
 }
 
 #[derive(Debug, Clone)]

@@ -192,9 +192,7 @@ impl DbMan {
     }
 
     pub async fn update_or_insert_ip_ports(&self, ip: &str, ports: Vec<u16>) -> Result<i64, Error> {
-        let ports: Vec<i32> = ports.iter().map(|port| {
-            *port as i32
-        }).collect();
+        let ports: Vec<i32> = ports.iter().map(|port| *port as i32).collect();
 
         let stmt = self
             .client
@@ -233,9 +231,7 @@ impl DbMan {
     }
 
     pub async fn save_service(&self, service: &DetectorResponse) -> Result<u64, Error> {
-        let ip_id = self
-            .update_or_insert_ip(&service.target.ip)
-            .await?;
+        let ip_id = self.update_or_insert_ip(&service.target.ip).await?;
 
         let stmt = self
             .client

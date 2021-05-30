@@ -31,7 +31,7 @@ async fn test_server_tcp() {
                     Ok(n) if n == 0 => continue,
                     Ok(n) => {
                         msg.truncate(n);
-                        // println!("Message: {}", String::from_utf8_lossy(&msg).to_string());
+                        // println!("Payload: {}", String::from_utf8_lossy(&msg).to_string());
                         break;
                     }
                     Err(e) => panic!("TCP server error {}", e),

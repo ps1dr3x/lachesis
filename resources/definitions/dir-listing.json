@@ -10,7 +10,9 @@
                 8181,
                 8081,
                 8180
-            ]
+            ],
+            "method": "GET",
+            "path": "/"
         },
         "service": {
             "regex": "(?i)Index of(?-i)",
