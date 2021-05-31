@@ -125,10 +125,18 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
                 for port in &def.options.ports {
                     if open_ports.contains(port) {
                         let options = HttpsOptions {
-                            method: def.options.method.clone().unwrap_or("GET".to_string()),
-                            path: def.options.path.clone().unwrap_or("/".to_string()),
-                            headers: def.options.headers.clone().unwrap_or(Vec::new()),
-                            payload: def.options.payload.clone().unwrap_or("".to_string()),
+                            method: def
+                                .options
+                                .method
+                                .clone()
+                                .unwrap_or_else(|| "GET".to_string()),
+                            path: def.options.path.clone().unwrap_or_else(|| "/".to_string()),
+                            headers: def.options.headers.clone().unwrap_or_default(),
+                            payload: def
+                                .options
+                                .payload
+                                .clone()
+                                .unwrap_or_else(|| "".to_string()),
                         };
                         http_s_unique_opts.insert((*port, options));
                     }

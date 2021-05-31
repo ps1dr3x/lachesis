@@ -23,11 +23,11 @@ jobs:
       - name: Run docker-compose (test db)
         run: docker-compose up -d
 
-      - name: (Rust) Install latest nightly
+      - name: (Rust) Install latest stable
         uses: actions-rs/toolchain@v1
         with:
-            toolchain: nightly
-            override: true
+          profile: minimal
+          toolchain: stable
 
       - name: (Rust) Test
         run: cargo test

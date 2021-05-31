@@ -77,7 +77,7 @@ OPTIONS:
 
 ### Dependencies
 
-- [Rust](https://rustup.rs/): Nightly channel is currently needed, as some unstable features are used
+- [Rust](https://rustup.rs/): Can be compiled using an updated stable version
 - [Node.js, Npm](https://nodejs.org): Needed for the Web UI (front end) part
 - On Linux and BSD based OS:
   - pkg-config (pkg-config on deb, pkg-config/pkgconfig/pkgconf-pkg-config on rpm)

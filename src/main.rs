@@ -1,5 +1,3 @@
-#![feature(try_trait, termination_trait_lib, decl_macro)]
-
 #[macro_use]
 extern crate clap;
 #[macro_use]
@@ -21,9 +19,7 @@ mod worker;
 
 use unindent::unindent;
 
-use crate::lachesis::ExitCode;
-
-fn main() -> ExitCode {
+fn main() {
     println!(
         "{}",
         unindent(
@@ -42,5 +38,8 @@ fn main() -> ExitCode {
         )
     );
 
-    lachesis::run()
+    std::process::exit(match lachesis::run() {
+        Ok(_) => 0,
+        Err(_) => 1,
+    });
 }

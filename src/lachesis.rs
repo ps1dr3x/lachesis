@@ -1,5 +1,3 @@
-use std::{fmt::Debug, process::Termination};
-
 use colored::Colorize;
 use tokio::{
     runtime::Builder,
@@ -14,21 +12,6 @@ use crate::{
     web::{self, UIMessage},
     worker::{self, PortsTarget, ReqTarget, WorkerMessage},
 };
-
-#[derive(Debug, PartialEq)]
-pub enum ExitCode {
-    Ok,
-    Err,
-}
-
-impl Termination for ExitCode {
-    fn report(self) -> i32 {
-        match self {
-            ExitCode::Ok => 0,
-            ExitCode::Err => 1,
-        }
-    }
-}
 
 async fn handle_response_msg(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target: ReqTarget) {
     stats.update_req_avg_time(target.time, &target.protocol);
@@ -90,14 +73,14 @@ async fn handle_portstarget_msg(stats: &mut Stats, dbm: &DbMan, ports_target: Po
     }
 }
 
-pub async fn run_worker(conf: &Conf) -> ExitCode {
+pub async fn run_worker(conf: &Conf) -> Result<(), ()> {
     let mut stats = Stats::new(conf.max_targets);
 
     let dbm = match DbMan::init(&conf.db_conf).await {
         Ok(dbm) => dbm,
         Err(err) => {
             stats.log_int_err(format!("Db initialization error: {}", err));
-            return ExitCode::Err;
+            return Err(());
         }
     };
 
@@ -150,10 +133,10 @@ pub async fn run_worker(conf: &Conf) -> ExitCode {
 
     stats.finish();
 
-    ExitCode::Ok
+    Ok(())
 }
 
-async fn run_ui() -> ExitCode {
+async fn run_ui() -> Result<(), ()> {
     let (tx, mut rx): (Sender<UIMessage>, Receiver<UIMessage>) = mpsc::channel(100);
 
     tokio::spawn(web::run(tx));
@@ -166,12 +149,12 @@ async fn run_ui() -> ExitCode {
     }
 }
 
-pub fn run() -> ExitCode {
+pub fn run() -> Result<(), ()> {
     let conf = match conf::load() {
         Ok(conf) => conf,
         Err(err) => {
-            println!("\n[{}] {}", "ERROR".red(), err);
-            return ExitCode::Err;
+            eprintln!("[{}] {}", "ERROR".red(), err);
+            return Err(());
         }
     };
 

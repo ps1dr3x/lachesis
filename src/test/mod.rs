@@ -93,7 +93,7 @@ async fn test_overall() {
     let mut conf = test_conf();
     conf.max_targets = 10;
 
-    lachesis::run_worker(&conf).await;
+    lachesis::run_worker(&conf).await.unwrap();
 
     rt.shutdown_background();
 
