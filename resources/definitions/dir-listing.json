@@ -15,7 +15,7 @@
             "path": "/"
         },
         "service": {
-            "regex": "(?i)Index of(?-i)",
+            "regex": "(?i)<h1>Index of |<h1>Directory listing for (?-i)",
             "log": true
         }
     }
