@@ -5,7 +5,7 @@ authors = ["Michele Federici (@ps1dr3x) <michele@federici.tech>"]
 edition = "2018"
 
 [dependencies]
-easy_reader = "=0.5.0"
+easy_reader = "=0.5.1"
 serde = "=1.0.126"
 serde_json = "=1.0.64"
 serde_derive = "=1.0.126"
