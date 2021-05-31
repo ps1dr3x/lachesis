@@ -33,8 +33,8 @@ impl DbMan {
     pub async fn init(db_conf: &DbConf) -> Result<Self, Error> {
         let (client, connection) = connect(
             &format!(
-                "host={} dbname={} user={} password={}",
-                db_conf.host, db_conf.dbname, db_conf.user, db_conf.password
+                "host={} port={} dbname={} user={} password={}",
+                db_conf.host, db_conf.port, db_conf.dbname, db_conf.user, db_conf.password
             ),
             NoTls,
         )

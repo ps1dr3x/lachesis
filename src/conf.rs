@@ -18,6 +18,7 @@ use crate::validators::{
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DbConf {
     pub host: String,
+    pub port: String,
     pub dbname: String,
     pub user: String,
     pub password: String,
@@ -27,6 +28,7 @@ impl Default for DbConf {
     fn default() -> DbConf {
         DbConf {
             host: String::new(),
+            port: String::new(),
             dbname: String::new(),
             user: String::new(),
             password: String::new(),

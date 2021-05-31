@@ -66,6 +66,7 @@ fn test_conf() -> Conf {
     let mut conf = Conf::default();
     conf.db_conf = DbConf {
         host: "127.0.0.1".to_string(),
+        port: "5432".to_string(),
         dbname: "lachesis_dev".to_string(),
         user: "lachesis_agent".to_string(),
         password: "insecure".to_string(),
