@@ -18,12 +18,6 @@ async fn handle_response_msg(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target
 
     stats.log_response(&target);
 
-    if !target.domain.is_empty() {
-        if let Err(err) = dbm.update_or_insert_domain(&target.domain).await {
-            stats.log_int_err(format!("Error while saving a domain in the db: {}", err));
-        };
-    }
-
     let det_responses = detector::detect(&target, &conf.definitions);
 
     let mut matching = false;
@@ -38,7 +32,7 @@ async fn handle_response_msg(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target
 
             stats.log_match(&res);
 
-            if let Err(err) = dbm.save_service(&res).await {
+            if let Err(err) = dbm.insert_service(&res).await {
                 stats.log_int_err(format!(
                     "Error while saving a matching service in the db: {}",
                     err
@@ -54,22 +48,12 @@ async fn handle_response_msg(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target
     stats.increment_successful(&target.protocol, matching);
 }
 
-async fn handle_portstarget_msg(stats: &mut Stats, dbm: &DbMan, ports_target: PortsTarget) {
+async fn handle_portstarget_msg(stats: &mut Stats, ports_target: PortsTarget) {
     stats.update_ports_stats(&ports_target);
 
     let open_ports = ports_target.open_ports();
     if !open_ports.is_empty() {
         stats.log_open_ports(&ports_target.ip, &open_ports);
-
-        if let Err(err) = dbm
-            .update_or_insert_ip_ports(&ports_target.ip, open_ports)
-            .await
-        {
-            stats.log_int_err(format!(
-                "Error while saving ip and ports in the db: {}",
-                err
-            ));
-        };
     }
 }
 
@@ -98,7 +82,7 @@ pub async fn run_worker(conf: &Conf) -> Result<(), ()> {
 
         match msg {
             WorkerMessage::PortsTarget(ports_target) => {
-                handle_portstarget_msg(&mut stats, &dbm, ports_target).await;
+                handle_portstarget_msg(&mut stats, ports_target).await;
                 continue;
             }
             WorkerMessage::Fail(target, error_context, error) => {
