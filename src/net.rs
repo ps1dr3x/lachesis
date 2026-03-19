@@ -207,14 +207,14 @@ pub async fn tcp_custom(
 
         // TODO - configurable max response size
         let mut response = vec![0; 10240];
-        let mut response_lenght = 0;
+        let mut response_length = 0;
         loop {
             stream.readable().await.unwrap();
 
             match stream.read(&mut response).await {
                 Ok(n) if n == 0 => break,
                 Ok(n) => {
-                    response_lenght += n;
+                    response_length += n;
                 }
                 Err(e) => {
                     tx.send(WorkerMessage::Fail(
@@ -229,8 +229,8 @@ pub async fn tcp_custom(
             };
         }
 
-        if response_lenght > 0 {
-            response.truncate(response_lenght);
+        if response_length > 0 {
+            response.truncate(response_length);
             target.response = String::from_utf8_lossy(&response).to_string();
             tx.send(WorkerMessage::Response(target.clone()))
                 .await

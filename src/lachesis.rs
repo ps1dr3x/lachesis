@@ -39,7 +39,6 @@ async fn handle_response_msg(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target
                 ));
                 continue;
             };
-
         }
     }
 
