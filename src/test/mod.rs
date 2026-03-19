@@ -1,9 +1,5 @@
-use std::{convert::Infallible, fs, net::SocketAddr};
+use std::fs;
 
-use hyper::{
-    service::{make_service_fn, service_fn},
-    Body, Request, Response, Server,
-};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
@@ -45,20 +41,23 @@ async fn test_server_tcp() {
     }
 }
 
-async fn test_html(_req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    let contents = fs::read_to_string("./resources/test.html").unwrap();
-    Ok(Response::new(contents.into()))
-}
-
 async fn test_server_http() {
-    let addr = SocketAddr::from(([0, 0, 0, 0], 4001));
+    let listener = TcpListener::bind("0.0.0.0:4001").await.unwrap();
+    loop {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        tokio::spawn(async move {
+            // Drain the request headers before responding
+            let mut buf = vec![0u8; 4096];
+            let _ = socket.read(&mut buf).await;
 
-    let make_svc = make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(test_html)) });
-
-    let server = Server::bind(&addr).serve(make_svc);
-
-    if let Err(e) = server.await {
-        panic!("HTTP server error: {}", e);
+            let contents = fs::read_to_string("./resources/test.html").unwrap();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                contents.len(),
+                contents
+            );
+            let _ = socket.write_all(response.as_bytes()).await;
+        });
     }
 }
 

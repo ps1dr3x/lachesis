@@ -39,7 +39,7 @@ impl Default for DbConf {
 #[derive(Clone, Debug, Validate)]
 pub struct Conf {
     pub db_conf: DbConf,
-    #[validate]
+    #[validate(nested)]
     pub definitions: Vec<Definition>,
     pub dataset: String,
     pub subnets: Arc<Mutex<(Vec<Ipv4AddrRange>, usize)>>,
@@ -69,23 +69,23 @@ impl Default for Conf {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Validate)]
-#[validate(schema(function = "validate_definition"))]
+#[validate(schema(function = validate_definition))]
 pub struct Definition {
     pub name: String,
-    #[validate(custom = "validate_protocol")]
+    #[validate(custom(function = validate_protocol))]
     pub protocol: String,
     pub options: Options,
-    #[validate]
+    #[validate(nested)]
     pub service: Service,
-    #[validate]
+    #[validate(nested)]
     pub versions: Option<Versions>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Validate)]
 pub struct Options {
-    #[validate(custom = "validate_method")]
+    #[validate(custom(function = validate_method))]
     pub method: Option<String>,
-    #[validate(custom = "validate_path")]
+    #[validate(custom(function = validate_path))]
     pub path: Option<String>,
     pub headers: Option<Vec<(String, String)>>,
     pub ports: Vec<u16>,
@@ -95,39 +95,39 @@ pub struct Options {
 
 #[derive(Clone, Debug, Serialize, Deserialize, Validate)]
 pub struct Service {
-    #[validate(custom = "validate_regex")]
+    #[validate(custom(function = validate_regex))]
     pub regex: String,
     pub log: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Validate)]
 pub struct Versions {
-    #[validate]
+    #[validate(nested)]
     pub semver: Option<SemverVersions>,
-    #[validate(custom = "validate_regex_ver")]
+    #[validate(custom(function = validate_regex_ver))]
     pub regex: Option<Vec<RegexVersion>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Validate)]
 pub struct SemverVersions {
-    #[validate(custom = "validate_regex")]
+    #[validate(custom(function = validate_regex))]
     pub regex: String,
-    #[validate]
+    #[validate(nested)]
     pub ranges: Vec<RangeVersion>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Validate)]
 pub struct RangeVersion {
-    #[validate(custom = "validate_semver")]
+    #[validate(custom(function = validate_semver))]
     pub from: String,
-    #[validate(custom = "validate_semver")]
+    #[validate(custom(function = validate_semver))]
     pub to: String,
     pub description: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Validate)]
 pub struct RegexVersion {
-    #[validate(custom = "validate_regex")]
+    #[validate(custom(function = validate_regex))]
     pub regex: String,
     pub version: String,
     pub description: String,

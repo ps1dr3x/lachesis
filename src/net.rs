@@ -3,18 +3,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-use hyper::{
-    client::{Client, HttpConnector},
-    Body, Method, Request, Uri,
-};
-use hyper_tls::HttpsConnector;
+use reqwest::Method;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
     sync::mpsc::Sender,
     time,
 };
-use tokio_native_tls::TlsConnector;
 
 use super::worker::{PortStatus, PortTarget, ReqTarget, WorkerMessage};
 
@@ -46,24 +41,11 @@ pub async fn test_port(ip: String, port: u16, timeout_millis: u64) -> PortTarget
     }
 }
 
-pub fn build_https_client() -> Client<HttpsConnector<HttpConnector>> {
-    // TODOs:
-    // - Tweak connectors and client configuration
-    // - Try using rustls instead of native_tls as TLS connector
-    let mut http = HttpConnector::new();
-    //http.set_connect_timeout(Some(Duration::from_millis(1000)));
-    http.enforce_http(false);
-    let tls_connector = native_tls::TlsConnector::builder()
+pub fn build_https_client() -> reqwest::Client {
+    reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
         .build()
-        .unwrap();
-    let tls_connector = TlsConnector::from(tls_connector);
-    let https = HttpsConnector::from((http, tls_connector));
-    Client::builder()
-        //.pool_idle_timeout(Duration::from_millis(1250))
-        //.http2_keep_alive_timeout(Duration::from_millis(1000))
-        //.retry_canceled_requests(false)
-        .build(https)
+        .expect("failed to build HTTP client")
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone)]
@@ -76,36 +58,73 @@ pub struct HttpsOptions {
 
 pub async fn http_s(
     tx: Sender<WorkerMessage>,
-    client: Client<HttpsConnector<HttpConnector>>,
+    client: reqwest::Client,
     mut target: ReqTarget,
     options: HttpsOptions,
     user_agent: String,
     timeout: u64,
 ) {
-    let uri: Uri = format!(
+    let url = format!(
         "{}://{}:{}{}",
         target.protocol, target.ip, target.port, options.path
-    )
-    .parse()
-    .unwrap();
+    );
 
-    let mut request = Request::builder()
-        .uri(uri)
-        .method(Method::from_bytes(options.method.as_bytes()).unwrap())
-        .header("Host", target.domain.clone())
-        .header("User-Agent", user_agent.clone())
-        .header("Accept", "*/*");
+    let method = Method::from_bytes(options.method.as_bytes()).unwrap_or(Method::GET);
+    let time_limit = Duration::from_secs(timeout);
 
-    for (header, value) in options.headers {
-        request = request.header(&header, &value);
-    }
-
-    let request = request.body(Body::from(options.payload)).unwrap();
-
-    let time = Duration::from_secs(timeout);
     let request = async {
-        let (parts, body) = match client.request(request).await {
-            Ok(r) => r.into_parts(),
+        let mut req = client
+            .request(method, &url)
+            .header("Host", &target.domain)
+            .header("User-Agent", &user_agent)
+            .header("Accept", "*/*");
+
+        for (k, v) in &options.headers {
+            req = req.header(k, v);
+        }
+
+        if !options.payload.is_empty() {
+            req = req.body(options.payload.clone());
+        }
+
+        match req.send().await {
+            Ok(resp) => {
+                let status = resp.status();
+                let version = resp.version();
+                let headers = resp.headers().clone();
+
+                match resp.bytes().await {
+                    Ok(b) => {
+                        let mut raw_content = format!("{:?} {}\r\n", version, status);
+                        for (name, value) in &headers {
+                            raw_content = format!(
+                                "{}{}: {}\r\n",
+                                raw_content,
+                                name,
+                                value.to_str().unwrap_or("")
+                            );
+                        }
+                        // Cap response body at 10240 bytes
+                        let body = &b[..b.len().min(10240)];
+                        raw_content =
+                            format!("{}\r\n{}", raw_content, String::from_utf8_lossy(body));
+
+                        target.response = raw_content;
+                        tx.send(WorkerMessage::Response(target.clone()))
+                            .await
+                            .unwrap();
+                    }
+                    Err(e) => {
+                        tx.send(WorkerMessage::Fail(
+                            target.clone(),
+                            "Response error".to_string(),
+                            Some(e.to_string()),
+                        ))
+                        .await
+                        .unwrap();
+                    }
+                }
+            }
             Err(e) => {
                 tx.send(WorkerMessage::Fail(
                     target.clone(),
@@ -114,43 +133,11 @@ pub async fn http_s(
                 ))
                 .await
                 .unwrap();
-                return;
             }
-        };
-
-        match hyper::body::to_bytes(body).await {
-            Ok(b) => {
-                // Merge response's headers and body (UTF-8)
-                let mut raw_content = format!("{:?} {}\r\n", parts.version, parts.status);
-                for (name, value) in &parts.headers {
-                    raw_content = format!(
-                        "{}{}: {}\r\n",
-                        raw_content,
-                        name,
-                        value.to_str().unwrap_or("")
-                    );
-                }
-                raw_content = format!("{}\r\n{}", raw_content, String::from_utf8_lossy(&b));
-
-                target.response = raw_content;
-
-                tx.send(WorkerMessage::Response(target.clone()))
-                    .await
-                    .unwrap();
-            }
-            Err(e) => {
-                tx.send(WorkerMessage::Fail(
-                    target.clone(),
-                    "Response error".to_string(),
-                    Some(e.to_string()),
-                ))
-                .await
-                .unwrap();
-            }
-        };
+        }
     };
 
-    if time::timeout(time, request).await.is_err() {
+    if time::timeout(time_limit, request).await.is_err() {
         tx.send(WorkerMessage::Timeout(target.clone()))
             .await
             .unwrap();

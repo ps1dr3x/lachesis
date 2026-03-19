@@ -10,8 +10,6 @@ use std::{
 };
 
 use easy_reader::EasyReader;
-use hyper::client::{Client, HttpConnector};
-use hyper_tls::HttpsConnector;
 use serde_derive::{Deserialize, Serialize};
 use tokio::{
     sync::{mpsc::Sender, Mutex, Semaphore},
@@ -258,7 +256,7 @@ struct WorkerRequests {
 #[derive(Debug, Clone)]
 struct WorkerState {
     conf: Conf,
-    https_client: Client<HttpsConnector<HttpConnector>>,
+    https_client: reqwest::Client,
     targets_count: u64,
     targets_completed: Arc<AtomicU64>,
     semaphore: Arc<Semaphore>,
@@ -266,7 +264,7 @@ struct WorkerState {
 }
 
 impl WorkerState {
-    fn new(conf: Conf, https_client: Client<HttpsConnector<HttpConnector>>) -> Self {
+    fn new(conf: Conf, https_client: reqwest::Client) -> Self {
         let max_concurrent_requests = conf.max_concurrent_requests;
 
         Self {
