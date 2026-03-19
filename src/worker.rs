@@ -1,7 +1,6 @@
 use std::{
     collections::HashSet,
     fs::File,
-    path::Path,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -68,9 +67,8 @@ async fn check_ports(
         ws.maybe_release_permit().await;
     }
 
-    tx.send(WorkerMessage::PortsTarget(ports_target))
-        .await
-        .unwrap();
+    // If the receiver has been dropped we're shutting down, just return.
+    let _ = tx.send(WorkerMessage::PortsTarget(ports_target)).await;
 
     open_ports
 }
@@ -159,6 +157,7 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
                         target,
                         def.options.payload.clone().unwrap(),
                         ws.conf.req_timeout,
+                        ws.conf.max_response_size,
                     )
                     .await;
 
@@ -190,6 +189,7 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
                 opts.clone(),
                 ws.conf.user_agent.clone(),
                 ws.conf.req_timeout,
+                ws.conf.max_response_size,
             )
             .await;
 
@@ -197,7 +197,7 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
         }
     }
 
-    ws.targets_completed.fetch_add(1, Ordering::SeqCst);
+    ws.targets_completed.fetch_add(1, Ordering::Relaxed);
     tx.send(WorkerMessage::NextTarget).await.unwrap();
 }
 
@@ -212,14 +212,23 @@ pub struct DatasetRecord {
 // Pick a random dns record from the dataset
 // (excluding records which are not of type A)
 async fn get_next_dataset_target(dataset: &mut EasyReader<File>) -> Option<ReqTarget> {
-    loop {
-        let line_str = dataset.random_line().unwrap().unwrap();
-        let dataset_record: DatasetRecord = serde_json::from_str(&line_str).unwrap();
-        if dataset_record.record_type != "a" {
-            continue;
+    // Bound the search to avoid an infinite loop when the dataset has no A records
+    // or only a very small fraction of them.
+    const MAX_TRIES: usize = 10_000;
+    for _ in 0..MAX_TRIES {
+        let line_str = match dataset.random_line() {
+            Ok(Some(l)) => l,
+            _ => return None,
+        };
+        let dataset_record: DatasetRecord = match serde_json::from_str(&line_str) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        if dataset_record.record_type == "a" {
+            return Some(ReqTarget::new(dataset_record.name, dataset_record.value));
         }
-        return Some(ReqTarget::new(dataset_record.name, dataset_record.value));
     }
+    None
 }
 
 // Pick the next ip in the specified subnets
@@ -245,12 +254,6 @@ struct WorkerProbeTime {
     srtt: f32,
     rttvar: f32,
     timeout: f32,
-}
-
-#[derive(Debug, Clone)]
-struct WorkerRequests {
-    spawned: u64,
-    completed: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -339,12 +342,28 @@ pub enum WorkerMessage {
 pub async fn run(tx: Sender<WorkerMessage>, conf: Conf) {
     let mut ws = WorkerState::new(conf, net::build_https_client());
 
-    let mut dataset = if !ws.conf.dataset.is_empty() {
-        EasyReader::new(File::open(Path::new(&ws.conf.dataset)).unwrap()).unwrap()
+    let dataset_path = if !ws.conf.dataset.is_empty() {
+        ws.conf.dataset.clone()
     } else {
-        // When in subnet mode, open a test file here just as a workaround to avoid writing two
-        // different loops for the two modes or reopening the dataset file at every iteration
-        EasyReader::new(File::open("./resources/test-dataset.json").unwrap()).unwrap()
+        // In subnet mode a dataset file isn't used, but EasyReader needs something to
+        // open. Use the bundled test file as a harmless placeholder.
+        "./resources/test-dataset.json".to_string()
+    };
+    let mut dataset = match File::open(&dataset_path).map(EasyReader::new) {
+        Ok(Ok(r)) => r,
+        Ok(Err(e)) => {
+            eprintln!("[ERROR] Failed to initialise dataset reader: {}", e);
+            let _ = tx.send(WorkerMessage::Shutdown).await;
+            return;
+        }
+        Err(e) => {
+            eprintln!(
+                "[ERROR] Failed to open dataset file '{}': {}",
+                dataset_path, e
+            );
+            let _ = tx.send(WorkerMessage::Shutdown).await;
+            return;
+        }
     };
 
     while ws.conf.max_targets == 0 || ws.targets_count < ws.conf.max_targets {
@@ -364,7 +383,7 @@ pub async fn run(tx: Sender<WorkerMessage>, conf: Conf) {
         ws.targets_count += 1;
     }
 
-    while ws.targets_completed.load(Ordering::SeqCst) < ws.targets_count {
+    while ws.targets_completed.load(Ordering::Relaxed) < ws.targets_count {
         sleep(Duration::from_millis(500)).await;
     }
 
