@@ -238,13 +238,14 @@ fn search_definitions(
 #[derive(Parser, Debug)]
 #[command(
     name = "lachesis",
-    version = "v0.3.0",
+    version = "v0.4.0",
     author = "Michele Federici (@ps1dr3x) <michele@federici.tech>",
     about = "Web services mass scanner"
 )]
 struct Args {
-    /// The full path of the DNS dataset used for the requests.
-    /// Accepted format: {"name":"example.com","type":"a","value":"93.184.216.34"}
+    /// The full path of the DNS dataset used for the requests. JSONL, one record per line.
+    /// An example of a compatible dataset is the forward DNS dataset by Rapid7 (https://opendata.rapid7.com/sonar.fdns_v2/).
+    /// Example format of each line: {"name":"example.com","type":"a","value":"1.2.3.4"}
     #[arg(short = 'D', long, value_name = "FILE", conflicts_with_all = ["subnet", "web_ui"])]
     dataset: Option<String>,
 
@@ -265,7 +266,7 @@ struct Args {
         short = 'u',
         long = "user-agent",
         value_name = "STRING",
-        default_value = "lachesis/0.3.0"
+        default_value = "lachesis/0.4.0"
     )]
     user_agent: String,
 
