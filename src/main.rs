@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate rocket;
-
 mod conf;
 mod db;
 mod detector;

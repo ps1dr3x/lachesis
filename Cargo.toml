@@ -2,7 +2,7 @@
 name = "lachesis"
 version = "0.3.0"
 authors = ["Michele Federici (@ps1dr3x) <michele@federici.tech>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 easy_reader = "0.5.1"
@@ -19,7 +19,7 @@ indicatif = "0.17"
 colored = "2.2"
 ipnet = "2.10"
 validator = { version = "0.19", features = ["derive"] }
-rocket = { git = "https://github.com/SergioBenitez/Rocket", features = ["json"] }
+rocket = { version = "0.5.1", features = ["json"] }
 tokio-postgres = "0.7.12"
 clap = { version = "4.5", features = ["derive"] }
 
