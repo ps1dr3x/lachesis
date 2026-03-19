@@ -13,12 +13,12 @@ regex = "1.11"
 unindent = "0.2"
 semver = "1.0.24"
 tokio = { version = "1.43", features = ["macros", "rt-multi-thread", "io-util", "net", "sync", "time"] }
-reqwest = { version = "0.12", features = ["native-tls", "http2"] }
+reqwest = { version = "0.13.2", features = ["native-tls", "http2"] }
 http = "1"
-indicatif = "0.17"
-colored = "2.2"
+indicatif = "0.18.4"
+colored = "3.1.1"
 ipnet = "2.10"
-validator = { version = "0.19", features = ["derive"] }
+validator = { version = "0.20.0", features = ["derive"] }
 rocket = { version = "0.5.1", features = ["json"] }
 tokio-postgres = "0.7.12"
 clap = { version = "4.5", features = ["derive"] }
