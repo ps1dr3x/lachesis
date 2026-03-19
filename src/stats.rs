@@ -78,7 +78,7 @@ impl Stats {
         let m = MultiProgress::new();
         let mut pbs = Vec::new();
         let pb0 = if max_targets != 0 {
-            let pb = ProgressBar::new(max_targets as u64);
+            let pb = ProgressBar::new(max_targets);
             pb.set_style(
                 ProgressStyle::default_bar()
                     .template("\n[{elapsed_precise}] [{bar:40.cyan/blue}] ({eta})")
@@ -215,7 +215,7 @@ impl Stats {
 
     pub fn increment_targets(&mut self) {
         if self.max_targets != 0 {
-            self.progress_bars[0].set_position(self.targets as u64);
+            self.progress_bars[0].set_position(self.targets);
         }
 
         self.targets += 1;
@@ -316,7 +316,7 @@ impl Stats {
             "[{}][{}][{}:{}] Received a response. Length: {}",
             "RESPONSE".cyan(),
             target.protocol.to_uppercase().blue(),
-            format_host(&target).cyan(),
+            format_host(target).cyan(),
             target.port.to_string().cyan(),
             target.response.len().to_string().cyan()
         ));
@@ -327,7 +327,7 @@ impl Stats {
             "[{}][{}][{}:{}] - Request timeout",
             "TIMEOUT".yellow(),
             target.protocol.to_uppercase().blue(),
-            format_host(&target).cyan(),
+            format_host(target).cyan(),
             target.port.to_string().cyan(),
         ));
     }
@@ -337,7 +337,7 @@ impl Stats {
             "[{}][{}][{}:{}] - {}{}",
             "FAIL".magenta(),
             target.protocol.to_uppercase().blue(),
-            format_host(&target).cyan(),
+            format_host(target).cyan(),
             target.port.to_string().cyan(),
             error_context,
             if let Some(e) = error {

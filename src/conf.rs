@@ -15,25 +15,13 @@ use crate::validators::{
     validate_regex_ver, validate_semver,
 };
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct DbConf {
     pub host: String,
     pub port: String,
     pub dbname: String,
     pub user: String,
     pub password: String,
-}
-
-impl Default for DbConf {
-    fn default() -> DbConf {
-        DbConf {
-            host: String::new(),
-            port: String::new(),
-            dbname: String::new(),
-            user: String::new(),
-            password: String::new(),
-        }
-    }
 }
 
 #[derive(Clone, Debug, Validate)]
@@ -139,7 +127,7 @@ pub fn parse_validate_definitions(paths: &[String]) -> Result<Vec<Definition>, S
     let mut definitions = Vec::new();
 
     for path in paths {
-        let def_file = match File::open(&path) {
+        let def_file = match File::open(path) {
             Ok(file) => file,
             Err(_err) => {
                 return Err(format!(

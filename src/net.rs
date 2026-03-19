@@ -200,7 +200,7 @@ pub async fn tcp_custom(
             stream.readable().await.unwrap();
 
             match stream.read(&mut response).await {
-                Ok(n) if n == 0 => break,
+                Ok(0) => break,
                 Ok(n) => {
                     response_length += n;
                 }
