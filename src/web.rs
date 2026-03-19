@@ -1,7 +1,7 @@
 use colored::Colorize;
 use rocket::{
-    self, catch, catchers, delete, fs::NamedFile, get, http::Status, routes,
-    serde::json::Json, Request, State,
+    self, catch, catchers, delete, fs::NamedFile, get, http::Status, routes, serde::json::Json,
+    Request, State,
 };
 use tokio::sync::{mpsc::Sender, Mutex};
 

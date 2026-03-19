@@ -63,6 +63,7 @@ pub async fn http_s(
     options: HttpsOptions,
     user_agent: String,
     timeout: u64,
+    max_response_size: usize,
 ) {
     let url = format!(
         "{}://{}:{}{}",
@@ -104,8 +105,7 @@ pub async fn http_s(
                                 value.to_str().unwrap_or("")
                             );
                         }
-                        // Cap response body at 10240 bytes
-                        let body = &b[..b.len().min(10240)];
+                        let body = &b[..b.len().min(max_response_size)];
                         raw_content =
                             format!("{}\r\n{}", raw_content, String::from_utf8_lossy(body));
 
@@ -149,6 +149,7 @@ pub async fn tcp_custom(
     mut target: ReqTarget,
     payload: String,
     timeout: u64,
+    max_response_size: usize,
 ) {
     let addr = match format!("{}:{}", target.ip, target.port).parse::<SocketAddr>() {
         Ok(addr) => addr,
@@ -193,7 +194,7 @@ pub async fn tcp_custom(
         }
 
         // TODO - configurable max response size
-        let mut response = vec![0; 10240];
+        let mut response = vec![0; max_response_size];
         let mut response_length = 0;
         loop {
             stream.readable().await.unwrap();

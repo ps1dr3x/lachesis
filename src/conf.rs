@@ -49,6 +49,7 @@ pub struct Conf {
     pub max_concurrent_requests: usize,
     pub debug: bool,
     pub web_ui: bool,
+    pub max_response_size: usize,
 }
 
 impl Default for Conf {
@@ -64,6 +65,7 @@ impl Default for Conf {
             max_concurrent_requests: 0,
             debug: false,
             web_ui: false,
+            max_response_size: 10240,
         }
     }
 }
@@ -301,6 +303,15 @@ struct Args {
     /// Serve a web app (and a basic API) to visualize/explore collected data
     #[arg(short = 'w', long = "web-ui", conflicts_with_all = ["dataset", "subnet"])]
     web_ui: bool,
+
+    /// Maximum response body size in bytes (HTTP and TCP)
+    #[arg(
+        short = 'r',
+        long = "max-response-size",
+        value_name = "BYTES",
+        default_value_t = 10240
+    )]
+    max_response_size: usize,
 }
 
 pub fn load_db_conf() -> Result<DbConf, &'static str> {
@@ -386,5 +397,6 @@ pub fn load() -> Result<Conf, &'static str> {
         max_concurrent_requests: args.max_concurrent_requests,
         debug: args.debug,
         web_ui: false,
+        max_response_size: args.max_response_size,
     })
 }
