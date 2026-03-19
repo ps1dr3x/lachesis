@@ -108,4 +108,5 @@ pub async fn run(tx: Sender<UIMessage>) -> Result<(), rocket::Error> {
         .await?
         .launch()
         .await
+        .map(|_| ())
 }

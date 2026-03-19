@@ -24,10 +24,7 @@ validator = "=0.13.0"
 validator_derive = "=0.13.0"
 rocket = { git = "https://github.com/SergioBenitez/Rocket", features = ["json"] }
 tokio-postgres = "0.7.12"
-
-[dependencies.clap]
-version = "=2.33.3"
-features = ["yaml"]
+clap = { version = "4.5", features = ["derive"] }
 
 [dev-dependencies]
 hyper = { version = "=0.14.8", features = ["server"] }

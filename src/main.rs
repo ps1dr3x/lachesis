@@ -1,6 +1,4 @@
 #[macro_use]
-extern crate clap;
-#[macro_use]
 extern crate validator_derive;
 #[macro_use]
 extern crate rocket;
