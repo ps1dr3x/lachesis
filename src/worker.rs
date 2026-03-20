@@ -366,7 +366,24 @@ pub async fn run(tx: Sender<WorkerMessage>, conf: Conf) {
         }
     };
 
+    // Cap queued-but-not-yet-started tasks to avoid unbounded memory growth.
+    // With 0 (unlimited) concurrency we pick a sensible ceiling; otherwise
+    // we allow a small multiple of the concurrency limit so the semaphore is
+    // never starved while keeping the queue shallow.
+    let max_in_flight: u64 = if ws.conf.max_concurrent_requests == 0 {
+        102400
+    } else {
+        (ws.conf.max_concurrent_requests as u64) * 10
+    };
+
     while ws.conf.max_targets == 0 || ws.targets_count < ws.conf.max_targets {
+        // Backpressure: wait until in-flight tasks drain below the ceiling.
+        while ws.targets_count.saturating_sub(ws.targets_completed.load(Ordering::Relaxed))
+            >= max_in_flight
+        {
+            sleep(Duration::from_millis(50)).await;
+        }
+
         let target = if !ws.conf.dataset.is_empty() {
             get_next_dataset_target(&mut dataset).await
         } else {
