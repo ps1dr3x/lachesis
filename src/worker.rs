@@ -211,7 +211,10 @@ pub struct DatasetRecord {
 
 // Pick the next dns record from the dataset
 // (excluding records which are not of type A)
-async fn get_next_dataset_target(dataset: &mut EasyReader<File>, random: bool) -> Option<ReqTarget> {
+async fn get_next_dataset_target(
+    dataset: &mut EasyReader<File>,
+    random: bool,
+) -> Option<ReqTarget> {
     // When reading randomly, bound the search to avoid an infinite loop when the dataset
     // has no A records or only a very small fraction of them.
     let max_tries: usize = if random { 10_000 } else { usize::MAX };
@@ -385,7 +388,9 @@ pub async fn run(tx: Sender<WorkerMessage>, conf: Conf) {
 
     while ws.conf.max_targets == 0 || ws.targets_count < ws.conf.max_targets {
         // Backpressure: wait until in-flight tasks drain below the ceiling.
-        while ws.targets_count.saturating_sub(ws.targets_completed.load(Ordering::Relaxed))
+        while ws
+            .targets_count
+            .saturating_sub(ws.targets_completed.load(Ordering::Relaxed))
             >= max_in_flight
         {
             sleep(Duration::from_millis(50)).await;
