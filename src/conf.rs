@@ -38,6 +38,7 @@ pub struct Conf {
     pub debug: bool,
     pub web_ui: bool,
     pub max_response_size: usize,
+    pub random_dataset: bool,
 }
 
 impl Default for Conf {
@@ -54,6 +55,7 @@ impl Default for Conf {
             debug: false,
             web_ui: false,
             max_response_size: 10240,
+            random_dataset: false,
         }
     }
 }
@@ -301,6 +303,10 @@ struct Args {
         default_value_t = 10240
     )]
     max_response_size: usize,
+
+    /// Read the dataset in random order instead of sequentially
+    #[arg(long = "random-dataset", requires = "dataset")]
+    random_dataset: bool,
 }
 
 pub fn load_db_conf() -> Result<DbConf, &'static str> {
@@ -387,5 +393,6 @@ pub fn load() -> Result<Conf, &'static str> {
         debug: args.debug,
         web_ui: false,
         max_response_size: args.max_response_size,
+        random_dataset: args.random_dataset,
     })
 }

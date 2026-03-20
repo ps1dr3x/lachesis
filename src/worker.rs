@@ -209,16 +209,23 @@ pub struct DatasetRecord {
     pub value: String,
 }
 
-// Pick a random dns record from the dataset
+// Pick the next dns record from the dataset
 // (excluding records which are not of type A)
-async fn get_next_dataset_target(dataset: &mut EasyReader<File>) -> Option<ReqTarget> {
-    // Bound the search to avoid an infinite loop when the dataset has no A records
-    // or only a very small fraction of them.
-    const MAX_TRIES: usize = 10_000;
-    for _ in 0..MAX_TRIES {
-        let line_str = match dataset.random_line() {
-            Ok(Some(l)) => l,
-            _ => return None,
+async fn get_next_dataset_target(dataset: &mut EasyReader<File>, random: bool) -> Option<ReqTarget> {
+    // When reading randomly, bound the search to avoid an infinite loop when the dataset
+    // has no A records or only a very small fraction of them.
+    let max_tries: usize = if random { 10_000 } else { usize::MAX };
+    for _ in 0..max_tries {
+        let line_str = if random {
+            match dataset.random_line() {
+                Ok(Some(l)) => l,
+                _ => return None,
+            }
+        } else {
+            match dataset.next_line() {
+                Ok(Some(l)) => l,
+                _ => return None,
+            }
         };
         let dataset_record: DatasetRecord = match serde_json::from_str(&line_str) {
             Ok(r) => r,
@@ -385,7 +392,7 @@ pub async fn run(tx: Sender<WorkerMessage>, conf: Conf) {
         }
 
         let target = if !ws.conf.dataset.is_empty() {
-            get_next_dataset_target(&mut dataset).await
+            get_next_dataset_target(&mut dataset, ws.conf.random_dataset).await
         } else {
             get_next_subnet_target(&ws.conf).await
         };

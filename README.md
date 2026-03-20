@@ -45,6 +45,7 @@ Options:
   -v, --debug                          Print debug messages
   -w, --web-ui                         Serve a web app (and a basic API) to visualize/explore collected data
   -r, --max-response-size <BYTES>      Maximum response body size in bytes (HTTP and TCP) [default: 10240]
+      --random-dataset                 Read the dataset in random order instead of sequentially
   -h, --help                           Print help
   -V, --version                        Print version
 ```
