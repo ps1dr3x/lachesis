@@ -76,9 +76,12 @@ pub async fn http_s(
     let request = async {
         let mut req = client
             .request(method, &url)
-            .header("Host", &target.domain)
             .header("User-Agent", &user_agent)
             .header("Accept", "*/*");
+
+        if !target.domain.is_empty() {
+            req = req.header("Host", &target.domain);
+        }
 
         for (k, v) in &options.headers {
             req = req.header(k, v);
