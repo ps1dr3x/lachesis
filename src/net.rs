@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use reqwest::Method;
+use reqwest::{redirect, Method};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -44,6 +44,7 @@ pub async fn test_port(ip: String, port: u16, timeout_millis: u64) -> PortTarget
 pub fn build_https_client() -> reqwest::Client {
     reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
+        .redirect(redirect::Policy::none())
         .build()
         .expect("failed to build HTTP client")
 }
