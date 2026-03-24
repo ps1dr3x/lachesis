@@ -42,6 +42,13 @@ pub fn detect(target: &ReqTarget, definitions: &[Definition]) -> Vec<DetectorRes
             continue;
         }
 
+        if def.protocol == "http/s" {
+            let def_path = def.options.path.as_deref().unwrap_or("/");
+            if def_path != target.path {
+                continue;
+            }
+        }
+
         let mut response = DetectorResponse::new(target.clone());
 
         let service_re = Regex::new(def.service.regex.as_str()).unwrap();

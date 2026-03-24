@@ -79,6 +79,7 @@ pub struct ReqTarget {
     pub ip: String,
     pub port: u16,
     pub protocol: String,
+    pub path: String,
     pub response: String,
     pub time: Instant,
 }
@@ -90,6 +91,7 @@ impl ReqTarget {
             ip: String::new(),
             port: 0,
             protocol: String::new(),
+            path: String::new(),
             response: String::new(),
             time: Instant::now(),
         }
@@ -180,6 +182,7 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
             let mut target = target.clone();
             target.protocol = protocol.to_string();
             target.port = *port;
+            target.path = opts.path.clone();
             target.time = Instant::now();
 
             net::http_s(
