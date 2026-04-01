@@ -6,16 +6,230 @@
             "ports": [
                 80,
                 443,
+                8000,
                 8080,
-                8181,
                 8081,
-                8180
+                8180,
+                8181,
+                8443,
+                9000,
+                9001,
+                3000,
+                5000
             ],
             "method": "GET",
             "path": "/"
         },
         "service": {
-            "regex": "(?i)<h1>Index of |<h1>Directory listing for (?-i)",
+            "regex": "(?i)(<h[1-3]>(Index of|Directory [Ll]isting for) |\\[To Parent Directory\\]|<title>(Index of|Directory listing for) |<pre><a href=\"\\.\\./\">\\.\\./<\\/a>)",
+            "log": true
+        }
+    },
+    {
+        "name": "Directory listing - /backup",
+        "protocol": "http/s",
+        "options": {
+            "ports": [80, 443, 8000, 8080, 8443],
+            "method": "GET",
+            "path": "/backup/"
+        },
+        "service": {
+            "regex": "(?i)(<h[1-3]>(Index of|Directory [Ll]isting for) |\\[To Parent Directory\\]|<title>(Index of|Directory listing for) |<pre><a href=\"\\.\\./\">\\.\\./<\\/a>)",
+            "log": true
+        }
+    },
+    {
+        "name": "Directory listing - /backups",
+        "protocol": "http/s",
+        "options": {
+            "ports": [80, 443, 8000, 8080, 8443],
+            "method": "GET",
+            "path": "/backups/"
+        },
+        "service": {
+            "regex": "(?i)(<h[1-3]>(Index of|Directory [Ll]isting for) |\\[To Parent Directory\\]|<title>(Index of|Directory listing for) |<pre><a href=\"\\.\\./\">\\.\\./<\\/a>)",
+            "log": true
+        }
+    },
+    {
+        "name": "Directory listing - /uploads",
+        "protocol": "http/s",
+        "options": {
+            "ports": [80, 443, 8000, 8080, 8443],
+            "method": "GET",
+            "path": "/uploads/"
+        },
+        "service": {
+            "regex": "(?i)(<h[1-3]>(Index of|Directory [Ll]isting for) |\\[To Parent Directory\\]|<title>(Index of|Directory listing for) |<pre><a href=\"\\.\\./\">\\.\\./<\\/a>)",
+            "log": true
+        }
+    },
+    {
+        "name": "Directory listing - /files",
+        "protocol": "http/s",
+        "options": {
+            "ports": [80, 443, 8000, 8080, 8443],
+            "method": "GET",
+            "path": "/files/"
+        },
+        "service": {
+            "regex": "(?i)(<h[1-3]>(Index of|Directory [Ll]isting for) |\\[To Parent Directory\\]|<title>(Index of|Directory listing for) |<pre><a href=\"\\.\\./\">\\.\\./<\\/a>)",
+            "log": true
+        }
+    },
+    {
+        "name": "Directory listing - /data",
+        "protocol": "http/s",
+        "options": {
+            "ports": [80, 443, 8000, 8080, 8443],
+            "method": "GET",
+            "path": "/data/"
+        },
+        "service": {
+            "regex": "(?i)(<h[1-3]>(Index of|Directory [Ll]isting for) |\\[To Parent Directory\\]|<title>(Index of|Directory listing for) |<pre><a href=\"\\.\\./\">\\.\\./<\\/a>)",
+            "log": true
+        }
+    },
+    {
+        "name": "Directory listing - /share",
+        "protocol": "http/s",
+        "options": {
+            "ports": [80, 443, 8000, 8080, 8443],
+            "method": "GET",
+            "path": "/share/"
+        },
+        "service": {
+            "regex": "(?i)(<h[1-3]>(Index of|Directory [Ll]isting for) |\\[To Parent Directory\\]|<title>(Index of|Directory listing for) |<pre><a href=\"\\.\\./\">\\.\\./<\\/a>)",
+            "log": true
+        }
+    },
+    {
+        "name": "Directory listing - /pub",
+        "protocol": "http/s",
+        "options": {
+            "ports": [80, 443, 8000, 8080, 8443],
+            "method": "GET",
+            "path": "/pub/"
+        },
+        "service": {
+            "regex": "(?i)(<h[1-3]>(Index of|Directory [Ll]isting for) |\\[To Parent Directory\\]|<title>(Index of|Directory listing for) |<pre><a href=\"\\.\\./\">\\.\\./<\\/a>)",
+            "log": true
+        }
+    },
+    {
+        "name": "Directory listing - /tmp",
+        "protocol": "http/s",
+        "options": {
+            "ports": [80, 443, 8000, 8080, 8443],
+            "method": "GET",
+            "path": "/tmp/"
+        },
+        "service": {
+            "regex": "(?i)(<h[1-3]>(Index of|Directory [Ll]isting for) |\\[To Parent Directory\\]|<title>(Index of|Directory listing for) |<pre><a href=\"\\.\\./\">\\.\\./<\\/a>)",
+            "log": true
+        }
+    },
+    {
+        "name": "Directory listing - /logs",
+        "protocol": "http/s",
+        "options": {
+            "ports": [80, 443, 8000, 8080, 8443],
+            "method": "GET",
+            "path": "/logs/"
+        },
+        "service": {
+            "regex": "(?i)(<h[1-3]>(Index of|Directory [Ll]isting for) |\\[To Parent Directory\\]|<title>(Index of|Directory listing for) |<pre><a href=\"\\.\\./\">\\.\\./<\\/a>)",
+            "log": true
+        }
+    },
+    {
+        "name": "Directory listing - /download",
+        "protocol": "http/s",
+        "options": {
+            "ports": [80, 443, 8000, 8080, 8443],
+            "method": "GET",
+            "path": "/download/"
+        },
+        "service": {
+            "regex": "(?i)(<h[1-3]>(Index of|Directory [Ll]isting for) |\\[To Parent Directory\\]|<title>(Index of|Directory listing for) |<pre><a href=\"\\.\\./\">\\.\\./<\\/a>)",
+            "log": true
+        }
+    },
+    {
+        "name": "Directory listing - /cgi-bin",
+        "protocol": "http/s",
+        "options": {
+            "ports": [80, 443, 8000, 8080, 8443],
+            "method": "GET",
+            "path": "/cgi-bin/"
+        },
+        "service": {
+            "regex": "(?i)(<h[1-3]>(Index of|Directory [Ll]isting for) |\\[To Parent Directory\\]|<title>(Index of|Directory listing for) |<pre><a href=\"\\.\\./\">\\.\\./<\\/a>)",
+            "log": true
+        }
+    },
+    {
+        "name": "Directory listing - /wp-content",
+        "protocol": "http/s",
+        "options": {
+            "ports": [80, 443, 8000, 8080, 8443],
+            "method": "GET",
+            "path": "/wp-content/"
+        },
+        "service": {
+            "regex": "(?i)(<h[1-3]>(Index of|Directory [Ll]isting for) |\\[To Parent Directory\\]|<title>(Index of|Directory listing for) |<pre><a href=\"\\.\\./\">\\.\\./<\\/a>)",
+            "log": true
+        }
+    },
+    {
+        "name": "Directory listing - /var/www/html",
+        "protocol": "http/s",
+        "options": {
+            "ports": [80, 443, 8000, 8080, 8443],
+            "method": "GET",
+            "path": "/var/www/html/"
+        },
+        "service": {
+            "regex": "(?i)(<h[1-3]>(Index of|Directory [Ll]isting for) |\\[To Parent Directory\\]|<title>(Index of|Directory listing for) |<pre><a href=\"\\.\\./\">\\.\\./<\\/a>)",
+            "log": true
+        }
+    },
+    {
+        "name": "Directory listing - /magento",
+        "protocol": "http/s",
+        "options": {
+            "ports": [80, 443, 8000, 8080, 8443],
+            "method": "GET",
+            "path": "/magento/"
+        },
+        "service": {
+            "regex": "(?i)(<h[1-3]>(Index of|Directory [Ll]isting for) |\\[To Parent Directory\\]|<title>(Index of|Directory listing for) |<pre><a href=\"\\.\\./\">\\.\\./<\\/a>)",
+            "log": true
+        }
+    },
+    {
+        "name": "Directory listing - /wp-content/uploads",
+        "protocol": "http/s",
+        "options": {
+            "ports": [80, 443, 8000, 8080, 8443],
+            "method": "GET",
+            "path": "/wp-content/uploads/"
+        },
+        "service": {
+            "regex": "(?i)(<h[1-3]>(Index of|Directory [Ll]isting for) |\\[To Parent Directory\\]|<title>(Index of|Directory listing for) |<pre><a href=\"\\.\\./\">\\.\\./<\\/a>)",
+            "log": true
+        }
+    },
+    {
+        "name": "Directory listing - /admin",
+        "protocol": "http/s",
+        "options": {
+            "ports": [80, 443, 8000, 8080, 8443],
+            "method": "GET",
+            "path": "/admin/"
+        },
+        "service": {
+            "regex": "(?i)(<h[1-3]>(Index of|Directory [Ll]isting for) |\\[To Parent Directory\\]|<title>(Index of|Directory listing for) |<pre><a href=\"\\.\\./\">\\.\\./<\\/a>)",
             "log": true
         }
     }

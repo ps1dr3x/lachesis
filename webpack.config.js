@@ -5,32 +5,32 @@ module.exports = {
   module: {
     rules: [
       {
-        test: /\.js|.jsx$/,
+        test: /\.jsx?$/,
         exclude: /node_modules/,
         use: {
           loader: 'babel-loader'
         }
       },
       {
-        test: /\.css|.scss$/,
-        use: [
-          'style-loader',
-          'css-loader',
-          'sass-loader'
-        ]
+        test: /\.css$/,
+        use: ['style-loader', 'css-loader']
       },
       {
-        test: [/\.bmp$/, /\.gif$/, /\.jpe?g$/, /\.png$/],
-        loader: 'url-loader',
-        options: {
-          name: 'assets/[name].[hash:8].[ext]'
+        test: /\.scss$/,
+        use: ['style-loader', 'css-loader', 'sass-loader']
+      },
+      {
+        test: /\.(png|jpe?g|gif|bmp|svg)$/i,
+        type: 'asset/resource',
+        generator: {
+          filename: 'assets/[name].[hash:8][ext]'
         }
       },
       {
-        test: [/\.eot$/, /\.ttf$/, /\.svg$/, /\.woff$/, /\.woff2$/],
-        loader: 'file-loader',
-        options: {
-          name: 'assets/[name].[hash:8].[ext]'
+        test: /\.(eot|ttf|woff|woff2)$/i,
+        type: 'asset/resource',
+        generator: {
+          filename: 'assets/[name].[hash:8][ext]'
         }
       }
     ]

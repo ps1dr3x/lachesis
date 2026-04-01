@@ -1,0 +1,24 @@
+[
+    {
+        "name": "memcached",
+        "protocol": "tcp/custom",
+        "options": {
+            "ports": [11211],
+            "timeout": true,
+            "payload": "stats\r\n"
+        },
+        "service": {
+            "regex": "STAT pid",
+            "log": true
+        },
+        "versions": {
+            "regex": [
+                {
+                    "regex": "STAT version ([0-9]+\\.[0-9]+\\.[0-9]+)",
+                    "version": "memcached",
+                    "description": "Unauthenticated memcached instance (no SASL)"
+                }
+            ]
+        }
+    }
+]

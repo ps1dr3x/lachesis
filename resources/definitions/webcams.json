@@ -10,12 +10,17 @@
                 83,
                 88,
                 443,
+                554,
+                1935,
+                4747,
                 5001,
+                8000,
                 8010,
                 8060,
                 8080,
                 8081,
                 8083,
+                8554,
                 9000,
                 3000
             ],
@@ -23,25 +28,45 @@
             "path": "/"
         },
         "service": {
-            "regex": "IPCamera_Logo|MJPG-Streamer|(?i)webcam server(?-i)",
+            "regex": "IPCamera_Logo|MJPG-Streamer|(?i)webcam server|DCS-|Hikvision|AXIS|Dahua|ipcam|Network Camera|netcam(?-i)",
             "log": true
         },
         "versions": {
             "regex": [
                 {
                     "regex": "IPCamera_Logo",
-                    "version": "MayGion IP camera (admin:admin)",
-                    "description": "MayGion IP camera (admin:admin)"
+                    "version": "MayGion IP camera",
+                    "description": "MayGion IP camera (default credentials: admin:admin)"
                 },
                 {
                     "regex": "MJPG-Streamer",
                     "version": "MJPG-Streamer",
-                    "description": "MJPG-Streamer"
+                    "description": "MJPG-Streamer open video stream"
                 },
                 {
                     "regex": "(?i)webcam server(?-i)",
                     "version": "Android webcam",
-                    "description": "Android webcam"
+                    "description": "Android IP Webcam server"
+                },
+                {
+                    "regex": "(?i)hikvision(?-i)",
+                    "version": "Hikvision",
+                    "description": "Hikvision IP camera"
+                },
+                {
+                    "regex": "(?i)dahua(?-i)",
+                    "version": "Dahua",
+                    "description": "Dahua IP camera"
+                },
+                {
+                    "regex": "AXIS",
+                    "version": "AXIS",
+                    "description": "AXIS Network Camera"
+                },
+                {
+                    "regex": "(?i)DCS-(?-i)",
+                    "version": "D-Link DCS",
+                    "description": "D-Link DCS IP camera"
                 }
             ]
         }

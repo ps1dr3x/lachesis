@@ -14,14 +14,24 @@
         "versions": {
             "regex": [
                 {
-                    "regex": "OpenSSH_5.",
+                    "regex": "OpenSSH_5\\.",
                     "version": "OpenSSH 5.x",
-                    "description": "OpenSSH 5.x (outdated)"
+                    "description": "OpenSSH 5.x (end of life)"
                 },
                 {
-                    "regex": "OpenSSH_6.",
+                    "regex": "OpenSSH_6\\.",
                     "version": "OpenSSH 6.x",
-                    "description": "OpenSSH 6.x (outdated)"
+                    "description": "OpenSSH 6.x (end of life)"
+                },
+                {
+                    "regex": "OpenSSH_7\\.",
+                    "version": "OpenSSH 7.x",
+                    "description": "OpenSSH 7.x (end of life)"
+                },
+                {
+                    "regex": "OpenSSH_8\\.",
+                    "version": "OpenSSH 8.x",
+                    "description": "OpenSSH 8.x (outdated, upgrade to 9.x)"
                 }
             ]
         }

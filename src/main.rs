@@ -1,10 +1,3 @@
-#[macro_use]
-extern crate clap;
-#[macro_use]
-extern crate validator_derive;
-#[macro_use]
-extern crate rocket;
-
 mod conf;
 mod db;
 mod detector;
@@ -25,15 +18,13 @@ fn main() {
         unindent(
             "
 
-
         -------------8<-------------\x1b[1;36m
         .          .                 
         |  ,-. ,-. |-. ,-. ,-. . ,-. 
         |  ,-| |   | | |-' `-. | `-. 
         `' `-^ `-' ' ' `-' `-' ' `-'\x1b[0;36m
-                              v0.3.0\x1b[0m
+                              v0.4.0\x1b[0m
         -------------8<-------------
-
     "
         )
     );

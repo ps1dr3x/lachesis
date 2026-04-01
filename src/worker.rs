@@ -1,7 +1,6 @@
 use std::{
     collections::HashSet,
     fs::File,
-    path::Path,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -10,8 +9,6 @@ use std::{
 };
 
 use easy_reader::EasyReader;
-use hyper::client::{Client, HttpConnector};
-use hyper_tls::HttpsConnector;
 use serde_derive::{Deserialize, Serialize};
 use tokio::{
     sync::{mpsc::Sender, Mutex, Semaphore},
@@ -70,9 +67,8 @@ async fn check_ports(
         ws.maybe_release_permit().await;
     }
 
-    tx.send(WorkerMessage::PortsTarget(ports_target))
-        .await
-        .unwrap();
+    // If the receiver has been dropped we're shutting down, just return.
+    let _ = tx.send(WorkerMessage::PortsTarget(ports_target)).await;
 
     open_ports
 }
@@ -83,6 +79,7 @@ pub struct ReqTarget {
     pub ip: String,
     pub port: u16,
     pub protocol: String,
+    pub path: String,
     pub response: String,
     pub time: Instant,
 }
@@ -94,6 +91,7 @@ impl ReqTarget {
             ip: String::new(),
             port: 0,
             protocol: String::new(),
+            path: String::new(),
             response: String::new(),
             time: Instant::now(),
         }
@@ -161,6 +159,7 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
                         target,
                         def.options.payload.clone().unwrap(),
                         ws.conf.req_timeout,
+                        ws.conf.max_response_size,
                     )
                     .await;
 
@@ -183,6 +182,7 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
             let mut target = target.clone();
             target.protocol = protocol.to_string();
             target.port = *port;
+            target.path = opts.path.clone();
             target.time = Instant::now();
 
             net::http_s(
@@ -192,6 +192,7 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
                 opts.clone(),
                 ws.conf.user_agent.clone(),
                 ws.conf.req_timeout,
+                ws.conf.max_response_size,
             )
             .await;
 
@@ -199,7 +200,7 @@ async fn target_requests(tx: Sender<WorkerMessage>, ws: WorkerState, target: Req
         }
     }
 
-    ws.targets_completed.fetch_add(1, Ordering::SeqCst);
+    ws.targets_completed.fetch_add(1, Ordering::Relaxed);
     tx.send(WorkerMessage::NextTarget).await.unwrap();
 }
 
@@ -211,17 +212,36 @@ pub struct DatasetRecord {
     pub value: String,
 }
 
-// Pick a random dns record from the dataset
+// Pick the next dns record from the dataset
 // (excluding records which are not of type A)
-async fn get_next_dataset_target(dataset: &mut EasyReader<File>) -> Option<ReqTarget> {
-    loop {
-        let line_str = dataset.random_line().unwrap().unwrap();
-        let dataset_record: DatasetRecord = serde_json::from_str(&line_str).unwrap();
-        if dataset_record.record_type != "a" {
-            continue;
+async fn get_next_dataset_target(
+    dataset: &mut EasyReader<File>,
+    random: bool,
+) -> Option<ReqTarget> {
+    // When reading randomly, bound the search to avoid an infinite loop when the dataset
+    // has no A records or only a very small fraction of them.
+    let max_tries: usize = if random { 10_000 } else { usize::MAX };
+    for _ in 0..max_tries {
+        let line_str = if random {
+            match dataset.random_line() {
+                Ok(Some(l)) => l,
+                _ => return None,
+            }
+        } else {
+            match dataset.next_line() {
+                Ok(Some(l)) => l,
+                _ => return None,
+            }
+        };
+        let dataset_record: DatasetRecord = match serde_json::from_str(&line_str) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        if dataset_record.record_type == "a" {
+            return Some(ReqTarget::new(dataset_record.name, dataset_record.value));
         }
-        return Some(ReqTarget::new(dataset_record.name, dataset_record.value));
     }
+    None
 }
 
 // Pick the next ip in the specified subnets
@@ -250,15 +270,9 @@ struct WorkerProbeTime {
 }
 
 #[derive(Debug, Clone)]
-struct WorkerRequests {
-    spawned: u64,
-    completed: u64,
-}
-
-#[derive(Debug, Clone)]
 struct WorkerState {
     conf: Conf,
-    https_client: Client<HttpsConnector<HttpConnector>>,
+    https_client: reqwest::Client,
     targets_count: u64,
     targets_completed: Arc<AtomicU64>,
     semaphore: Arc<Semaphore>,
@@ -266,7 +280,7 @@ struct WorkerState {
 }
 
 impl WorkerState {
-    fn new(conf: Conf, https_client: Client<HttpsConnector<HttpConnector>>) -> Self {
+    fn new(conf: Conf, https_client: reqwest::Client) -> Self {
         let max_concurrent_requests = conf.max_concurrent_requests;
 
         Self {
@@ -341,17 +355,52 @@ pub enum WorkerMessage {
 pub async fn run(tx: Sender<WorkerMessage>, conf: Conf) {
     let mut ws = WorkerState::new(conf, net::build_https_client());
 
-    let mut dataset = if !ws.conf.dataset.is_empty() {
-        EasyReader::new(File::open(Path::new(&ws.conf.dataset)).unwrap()).unwrap()
+    let dataset_path = if !ws.conf.dataset.is_empty() {
+        ws.conf.dataset.clone()
     } else {
-        // When in subnet mode, open a test file here just as a workaround to avoid writing two
-        // different loops for the two modes or reopening the dataset file at every iteration
-        EasyReader::new(File::open("./resources/test-dataset.json").unwrap()).unwrap()
+        // In subnet mode a dataset file isn't used, but EasyReader needs something to
+        // open. Use the bundled test file as a harmless placeholder.
+        "./resources/test-dataset.json".to_string()
+    };
+    let mut dataset = match File::open(&dataset_path).map(EasyReader::new) {
+        Ok(Ok(r)) => r,
+        Ok(Err(e)) => {
+            eprintln!("[ERROR] Failed to initialise dataset reader: {}", e);
+            let _ = tx.send(WorkerMessage::Shutdown).await;
+            return;
+        }
+        Err(e) => {
+            eprintln!(
+                "[ERROR] Failed to open dataset file '{}': {}",
+                dataset_path, e
+            );
+            let _ = tx.send(WorkerMessage::Shutdown).await;
+            return;
+        }
+    };
+
+    // Cap queued-but-not-yet-started tasks to avoid unbounded memory growth.
+    // With 0 (unlimited) concurrency we pick a sensible ceiling; otherwise
+    // we allow a small multiple of the concurrency limit so the semaphore is
+    // never starved while keeping the queue shallow.
+    let max_in_flight: u64 = if ws.conf.max_concurrent_requests == 0 {
+        102400
+    } else {
+        (ws.conf.max_concurrent_requests as u64) * 10
     };
 
     while ws.conf.max_targets == 0 || ws.targets_count < ws.conf.max_targets {
+        // Backpressure: wait until in-flight tasks drain below the ceiling.
+        while ws
+            .targets_count
+            .saturating_sub(ws.targets_completed.load(Ordering::Relaxed))
+            >= max_in_flight
+        {
+            sleep(Duration::from_millis(50)).await;
+        }
+
         let target = if !ws.conf.dataset.is_empty() {
-            get_next_dataset_target(&mut dataset).await
+            get_next_dataset_target(&mut dataset, ws.conf.random_dataset).await
         } else {
             get_next_subnet_target(&ws.conf).await
         };
@@ -366,7 +415,7 @@ pub async fn run(tx: Sender<WorkerMessage>, conf: Conf) {
         ws.targets_count += 1;
     }
 
-    while ws.targets_completed.load(Ordering::SeqCst) < ws.targets_count {
+    while ws.targets_completed.load(Ordering::Relaxed) < ws.targets_count {
         sleep(Duration::from_millis(500)).await;
     }
 

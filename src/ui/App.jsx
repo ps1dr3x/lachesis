@@ -1,7 +1,7 @@
 'use strict'
 
 import React, { useState } from 'react'
-import ReactDOM from 'react-dom'
+import { createRoot } from 'react-dom/client'
 import { Container, Tab } from 'semantic-ui-react'
 import Header from './components/Header'
 import DataTable from './components/DataTable'
@@ -37,10 +37,10 @@ function App () {
           onTabChange={handleTabChange}
           className={active === 'Records' ? 'nopadding' : ''}
         />
-        <Footer version='v0.3.0' />
+        <Footer version='v0.4.0' />
       </Container>
     </div>
   )
 }
 
-ReactDOM.render(<App />, document.querySelector('#root'))
+createRoot(document.querySelector('#root')).render(<App />)

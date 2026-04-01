@@ -1,0 +1,24 @@
+[
+    {
+        "name": "mongodb",
+        "protocol": "tcp/custom",
+        "options": {
+            "ports": [27017],
+            "timeout": true,
+            "payload": "GET / HTTP/1.0\r\n\r\n"
+        },
+        "service": {
+            "regex": "looks like you are trying to access MongoDB",
+            "log": true
+        },
+        "versions": {
+            "regex": [
+                {
+                    "regex": "looks like you are trying to access MongoDB",
+                    "version": "MongoDB",
+                    "description": "Unauthenticated MongoDB instance accessible without credentials"
+                }
+            ]
+        }
+    }
+]

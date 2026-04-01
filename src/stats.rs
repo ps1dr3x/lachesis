@@ -1,4 +1,4 @@
-use std::{thread, time::Instant};
+use std::time::Instant;
 
 use colored::Colorize;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -78,31 +78,54 @@ impl Stats {
         let m = MultiProgress::new();
         let mut pbs = Vec::new();
         let pb0 = if max_targets != 0 {
-            let pb = ProgressBar::new(max_targets as u64);
+            let pb = ProgressBar::new(max_targets);
             pb.set_style(
                 ProgressStyle::default_bar()
                     .template("\n[{elapsed_precise}] [{bar:40.cyan/blue}] ({eta})")
+                    .expect("valid template")
                     .progress_chars("#>-"),
             );
             pb
         } else {
             let pb = ProgressBar::new(0);
             pb.set_style(
-                ProgressStyle::default_spinner().template("\n[{elapsed_precise}] {spinner:.green}"),
+                ProgressStyle::default_spinner()
+                    .template("\n[{elapsed_precise}] {spinner:.green}")
+                    .expect("valid template"),
             );
             pb
         };
 
         let pb1 = ProgressBar::new(0);
-        pb1.set_style(ProgressStyle::default_spinner().template("{wide_msg}"));
+        pb1.set_style(
+            ProgressStyle::default_spinner()
+                .template("{wide_msg}")
+                .expect("valid template"),
+        );
         let pb2 = ProgressBar::new(0);
-        pb2.set_style(ProgressStyle::default_spinner().template("{wide_msg}"));
+        pb2.set_style(
+            ProgressStyle::default_spinner()
+                .template("{wide_msg}")
+                .expect("valid template"),
+        );
         let pb3 = ProgressBar::new(0);
-        pb3.set_style(ProgressStyle::default_spinner().template("{wide_msg}"));
+        pb3.set_style(
+            ProgressStyle::default_spinner()
+                .template("{wide_msg}")
+                .expect("valid template"),
+        );
         let pb4 = ProgressBar::new(0);
-        pb4.set_style(ProgressStyle::default_spinner().template("{wide_msg}"));
+        pb4.set_style(
+            ProgressStyle::default_spinner()
+                .template("{wide_msg}")
+                .expect("valid template"),
+        );
         let pb5 = ProgressBar::new(0);
-        pb5.set_style(ProgressStyle::default_spinner().template("{wide_msg}"));
+        pb5.set_style(
+            ProgressStyle::default_spinner()
+                .template("{wide_msg}")
+                .expect("valid template"),
+        );
         pbs.push(m.add(pb0));
         pbs.push(m.add(pb1));
         pbs.push(m.add(pb2));
@@ -110,7 +133,7 @@ impl Stats {
         pbs.push(m.add(pb4));
         pbs.push(m.add(pb5));
 
-        thread::spawn(move || m.join().unwrap());
+        drop(m);
 
         Stats {
             start_time: Instant::now(),
@@ -192,7 +215,7 @@ impl Stats {
 
     pub fn increment_targets(&mut self) {
         if self.max_targets != 0 {
-            self.progress_bars[0].set_position(self.targets as u64);
+            self.progress_bars[0].set_position(self.targets);
         }
 
         self.targets += 1;
@@ -293,7 +316,7 @@ impl Stats {
             "[{}][{}][{}:{}] Received a response. Length: {}",
             "RESPONSE".cyan(),
             target.protocol.to_uppercase().blue(),
-            format_host(&target).cyan(),
+            format_host(target).cyan(),
             target.port.to_string().cyan(),
             target.response.len().to_string().cyan()
         ));
@@ -304,7 +327,7 @@ impl Stats {
             "[{}][{}][{}:{}] - Request timeout",
             "TIMEOUT".yellow(),
             target.protocol.to_uppercase().blue(),
-            format_host(&target).cyan(),
+            format_host(target).cyan(),
             target.port.to_string().cyan(),
         ));
     }
@@ -314,7 +337,7 @@ impl Stats {
             "[{}][{}][{}:{}] - {}{}",
             "FAIL".magenta(),
             target.protocol.to_uppercase().blue(),
-            format_host(&target).cyan(),
+            format_host(target).cyan(),
             target.port.to_string().cyan(),
             error_context,
             if let Some(e) = error {

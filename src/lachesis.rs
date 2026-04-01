@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use colored::Colorize;
 use tokio::{
     runtime::Builder,
@@ -13,7 +15,7 @@ use crate::{
     worker::{self, PortsTarget, ReqTarget, WorkerMessage},
 };
 
-async fn handle_response_msg(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target: ReqTarget) {
+async fn handle_response_msg(conf: &Conf, stats: &mut Stats, dbm: Arc<DbMan>, target: ReqTarget) {
     stats.update_req_avg_time(target.time, &target.protocol);
 
     stats.log_response(&target);
@@ -32,16 +34,14 @@ async fn handle_response_msg(conf: &Conf, stats: &mut Stats, dbm: &DbMan, target
 
             stats.log_match(&res);
 
-            if let Err(err) = dbm.insert_service(&res).await {
-                stats.log_int_err(format!(
-                    "Error while saving a matching service in the db: {}",
-                    err
-                ));
-                continue;
-            };
-
-            // headless_chrome is unmaintained
-            // browser::maybe_take_screenshot(&target, id);
+            // Spawn DB insert as a non-blocking task so the message loop
+            // isn't stalled waiting for the database round-trip.
+            let dbm_clone = Arc::clone(&dbm);
+            tokio::spawn(async move {
+                if let Err(err) = dbm_clone.insert_service(&res).await {
+                    eprintln!("[ERROR] DB insert failed: {}", err);
+                }
+            });
         }
     }
 
@@ -60,13 +60,13 @@ async fn handle_portstarget_msg(stats: &mut Stats, ports_target: PortsTarget) {
 pub async fn run_worker(conf: &Conf) -> Result<(), ()> {
     let mut stats = Stats::new(conf.max_targets);
 
-    let dbm = match DbMan::init(&conf.db_conf).await {
+    let dbm = Arc::new(match DbMan::init(&conf.db_conf).await {
         Ok(dbm) => dbm,
         Err(err) => {
             stats.log_int_err(format!("Db initialization error: {}", err));
             return Err(());
         }
-    };
+    });
 
     let (tx, mut rx): (Sender<WorkerMessage>, Receiver<WorkerMessage>) = mpsc::channel(100_000);
 
@@ -100,7 +100,7 @@ pub async fn run_worker(conf: &Conf) -> Result<(), ()> {
                 continue;
             }
             WorkerMessage::Response(target) => {
-                handle_response_msg(conf, &mut stats, &dbm, target).await;
+                handle_response_msg(conf, &mut stats, Arc::clone(&dbm), target).await;
                 continue;
             }
             WorkerMessage::NextTarget => {
